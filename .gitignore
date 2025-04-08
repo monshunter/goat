@@ -1,0 +1,43 @@
+# 编译生成的二进制文件和构建目录
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 测试二进制文件和覆盖率文件
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Go特定的忽略
+/vendor/
+/Godeps/
+
+# IDE和编辑器文件
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.bak
+
+# 日志文件
+*.log
+logs/
+
+# 环境配置文件
+.env
+.env.local
+.env.*
+
+# 项目特定文件
+# 根据项目需要可能会添加更多特定忽略项 
