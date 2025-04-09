@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/format/diff"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
 )
@@ -40,12 +39,12 @@ func NewDiffer(projectPath, stableBranch, publishBranch string, workers int) (*D
 		workers:       workers,
 		commits:       make(map[plumbing.Hash]*object.Commit),
 	}
-	stableHash, err := d.resolveRef(stableBranch)
+	stableHash, err := resolveRef(d.repo, stableBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve stable branch: %w", err)
 	}
 
-	publishHash, err := d.resolveRef(publishBranch)
+	publishHash, err := resolveRef(d.repo, publishBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve publish branch: %w", err)
 	}
@@ -59,7 +58,6 @@ func NewDiffer(projectPath, stableBranch, publishBranch string, workers int) (*D
 	if err != nil {
 		return nil, fmt.Errorf("failed to get publish branch commit: %w", err)
 	}
-
 	d.stableHash = stableHash
 	d.publishHash = publishHash
 	d.stableCommit = stableCommit
@@ -171,31 +169,6 @@ func (d *Differ) handleInsert(change *object.Change) (*FileChange, error) {
 	return &fc, nil
 }
 
-// resolveRef resolves a reference (branch name or commit hash) to a commit hash
-func (d *Differ) resolveRef(ref string) (plumbing.Hash, error) {
-	// Try to parse directly as hash
-	hash, err := d.repo.ResolveRevision(plumbing.Revision(ref))
-	if err == nil {
-		return *hash, nil
-	}
-	// Try to resolve as branch
-	refName := plumbing.NewBranchReferenceName(ref)
-	hash, err = d.repo.ResolveRevision(plumbing.Revision(refName))
-	if err == nil {
-		fmt.Printf("resolveRef: %s, hash: %s\n", ref, hash.String())
-		return *hash, nil
-	}
-
-	// Try to resolve as tag
-	refName = plumbing.NewTagReferenceName(ref)
-	hash, err = d.repo.ResolveRevision(plumbing.Revision(refName))
-	if err == nil {
-		return *hash, nil
-	}
-
-	return plumbing.ZeroHash, fmt.Errorf("unable to resolve reference: %s", ref)
-}
-
 // GetLineChanges gets line-level change information for a file, focusing only on incremental code
 func (d *Differ) getLineChanges(filepath string) ([]LineChange, error) {
 	// Get file content
@@ -267,170 +240,4 @@ func (d *Differ) isCommitAfterStable(commitHash plumbing.Hash, stableHash plumbi
 // GetRepoPath returns the path of the repository
 func (d *Differ) GetRepoPath() string {
 	return d.repoPath
-}
-
-// filterValidFileChanges filters out nil entries from the file changes slice
-func filterValidFileChanges(fileChanges []*FileChange) []*FileChange {
-	slow, fast := 0, 0
-	for fast < len(fileChanges) {
-		if fileChanges[fast] != nil {
-			fileChanges[slow] = fileChanges[fast]
-			slow++
-		}
-		fast++
-	}
-	return fileChanges[:slow]
-}
-
-// filterValidFileChangesOptimized evaluates the correctness of the optimized file changes filter
-// 1. Correctness:
-//   - Correctly filters out nil entries from the slice
-//   - Maintains all non-nil entries in the result
-//   - Handles edge cases (all nil, none nil, single element)
-//   - Doesn't preserve original order (which is acceptable per function name)
-//
-// 2. Algorithm Analysis:
-//   - Uses two-pointer technique (i from start, j from end)
-//   - Swaps nil elements to the end of the slice
-//   - Complexity: O(n) where n is length of slice
-//   - More efficient than original filterValidFileChanges (single pass vs two-pass)
-//   - Uses constant space (in-place modification)
-//
-// 3. Optimization Suggestions:
-//   - Could use unsafe.Pointer for faster swaps
-//   - Add early exit if no nil elements found
-//   - Consider using SIMD instructions for bulk nil checks
-//   - Add benchmark tests against original implementation
-//   - Could parallelize nil checks for very large slices
-//
-// 4. Comparison with Original:
-//   - Faster (O(n) vs O(2n))
-//   - Doesn't preserve order (tradeoff for performance)
-//   - Same memory usage (both in-place)
-//   - Simpler implementation
-//
-// filterValidFileChangesOptimized ignore order
-func filterValidFileChangesOptimized(fileChanges []*FileChange) []*FileChange {
-	i, j := 0, len(fileChanges)-1
-	for i <= j {
-		if fileChanges[i] == nil {
-			fileChanges[i], fileChanges[j] = fileChanges[j], fileChanges[i]
-			j--
-		} else {
-			i++
-		}
-	}
-	return fileChanges[:i]
-}
-
-// AnalyzeChangesV2 Correctness evaluates the correctness of AnalyzeChangesV2 implementation
-// 1. Correctness:
-//    - Correctly identifies added chunks in diff
-//    - Properly handles file filtering for Go files
-//    - Correctly calculates line numbers for changes
-//    - Missing handling for renamed files (same as original AnalyzeChanges)
-//    - Doesn't properly handle empty files (count could be 0)
-//
-// 2. Algorithm Analysis:
-//    - Uses patch-based diffing which is more efficient than tree diff for some cases
-//    - Complexity: O(n) where n is total lines in all changed files
-//    - Memory efficient - processes files sequentially without storing all changes
-//    - More accurate line counting than blame-based approach
-//
-// 3. Optimization Suggestions:
-//    - Add parallel processing similar to original AnalyzeChanges
-//    - Cache file content to avoid repeated splitting
-//    - Pre-allocate lineChanges slice with estimated capacity
-//    - Add special handling for large files (>1000 lines)
-//    - Consider using line hashes for more accurate change detection
-//    - Add metrics collection for performance monitoring
-//
-// 4. Comparison with Original:
-//    - More accurate for line-level changes
-//    - Simpler implementation
-//    - Less memory overhead
-//    - Missing commit-based filtering of changes
-//    - Could be combined with blame approach for best results
-
-func (d *Differ) AnalyzeChangesV2() ([]*FileChange, error) {
-	patch, err := d.stableCommit.Patch(d.publishCommit)
-	if err != nil {
-		// TODO: return err
-		return nil, err
-	}
-	// Analyze changes
-	// Process changes concurrently with worker pool
-	filePatches := patch.FilePatches()
-	fileChanges := make([]*FileChange, len(filePatches))
-	sem := make(chan struct{}, d.workers) // concurrent workers,default 10
-	var wg sync.WaitGroup
-	wg.Add(len(filePatches))
-	for i, filePatch := range filePatches {
-		sem <- struct{}{} // acquire worker slot
-		go func(idx int, filePath diff.FilePatch) {
-			defer func() {
-				<-sem // release worker slot
-				wg.Done()
-			}()
-			fc := d.analyzeChangeV2(filePatch)
-			if fc != nil && len(fc.LineChanges) > 0 {
-				fileChanges[idx] = fc
-			}
-		}(i, filePatch)
-	}
-	wg.Wait()
-	return filterValidFileChangesOptimized(fileChanges), nil
-}
-
-func (d *Differ) analyzeChangeV2(filePatch diff.FilePatch) *FileChange {
-	from, to := filePatch.Files()
-	if (from == nil && to == nil) || (from != nil && to == nil) {
-		return nil
-	}
-	if !strings.HasSuffix(to.Path(), ".go") || strings.HasSuffix(to.Path(), "_test.go") {
-		return nil
-	}
-	if from == nil && to != nil {
-
-		lineChanges := make([]LineChange, 0)
-		count := getLinesFromChunks(filePatch.Chunks())
-		lineChanges = append(lineChanges, LineChange{Start: 1, Lines: count})
-		if len(lineChanges) == 0 {
-			return nil
-		}
-		return &FileChange{Path: to.Path(), LineChanges: lineChanges}
-	}
-
-	lineChanges := make([]LineChange, 0)
-	originLineNo := 0
-	newLineNo := 0
-	for _, chunk := range filePatch.Chunks() {
-		lines := strings.Split(chunk.Content(), "\n")
-		if chunk.Type() == diff.Add {
-			start := newLineNo + 1
-			count := len(lines) - 1
-			lineChanges = append(lineChanges, LineChange{Start: start, Lines: count})
-		}
-
-		if chunk.Type() == diff.Equal {
-			originLineNo += len(lines) - 1
-			newLineNo += len(lines) - 1
-		} else if chunk.Type() == diff.Delete {
-			originLineNo += len(lines) - 1
-		} else if chunk.Type() == diff.Add {
-			newLineNo += len(lines) - 1
-		}
-	}
-	if len(lineChanges) > 0 {
-		return &FileChange{Path: to.Path(), LineChanges: lineChanges}
-	}
-	return nil
-}
-
-func getLinesFromChunks(chunks []diff.Chunk) int {
-	count := 0
-	for _, chunk := range chunks {
-		count += len(strings.Split(chunk.Content(), "\n")) - 1
-	}
-	return count
 }
