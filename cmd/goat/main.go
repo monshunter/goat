@@ -2,10 +2,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"sort"
 
 	"github.com/monshunter/goat/pkg/diff"
+	"github.com/monshunter/goat/pkg/tracking"
 )
 
 func main() {
@@ -18,7 +20,7 @@ func main() {
 		log.Fatalf("project path, stable branch and publish branch are required")
 	}
 	var differ diff.DifferInterface
-	differ, err := diff.NewDifferV3(*projectPath, *stableBranch, *publishBranch, *workers)
+	differ, err := diff.NewDifferV2(*projectPath, *stableBranch, *publishBranch, *workers)
 	if err != nil {
 		log.Fatalf("failed to create differ: %v", err)
 	}
@@ -33,4 +35,14 @@ func main() {
 	for _, change := range changes {
 		log.Printf("change: %v", change)
 	}
+	track, err := tracking.NewIncreamentTrack(*projectPath, changes[0], nil)
+	if err != nil {
+		log.Fatalf("failed to create track: %v", err)
+	}
+	n, err := track.Track()
+	if err != nil {
+		log.Fatalf("failed to track: %v", err)
+	}
+	log.Printf("tracked %d files", n)
+	fmt.Printf("%s", track.Bytes())
 }
