@@ -15,15 +15,19 @@ import (
 )
 
 type IncreamentTrack struct {
-	basePath   string
-	fileChange *diff.FileChange
-	provider   TrackTemplateProvider
-	count      int
-	content    []byte
-	fileName   string
+	basePath            string
+	fileChange          *diff.FileChange
+	provider            TrackTemplateProvider
+	count               int
+	content             []byte
+	fileName            string
+	positionInserts     InsertPositions
+	lastBlockInsertLine int
+	granularity         Granularity
 }
 
-func NewIncreamentTrack(basePath string, fileChange *diff.FileChange, provider TrackTemplateProvider) (*IncreamentTrack, error) {
+func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
+	provider TrackTemplateProvider, granularity Granularity) (*IncreamentTrack, error) {
 	fileName := fileChange.Path
 	if !filepath.IsAbs(fileName) {
 		fileName = filepath.Join(basePath, fileName)
@@ -38,11 +42,13 @@ func NewIncreamentTrack(basePath string, fileChange *diff.FileChange, provider T
 		return nil, err
 	}
 	return &IncreamentTrack{
-		basePath:   basePath,
-		fileChange: fileChange,
-		provider:   provider,
-		fileName:   fileName,
-		content:    content,
+		basePath:        basePath,
+		fileChange:      fileChange,
+		provider:        provider,
+		fileName:        fileName,
+		content:         content,
+		positionInserts: InsertPositions{},
+		granularity:     granularity,
 	}, nil
 }
 
@@ -55,9 +61,8 @@ func (t *IncreamentTrack) getAstTree() (*token.FileSet, *ast.File, error) {
 	return fset, f, nil
 }
 
-func (t *IncreamentTrack) formatAST(fset *token.FileSet, f *ast.File) ([]byte, error) {
+func (t *IncreamentTrack) formatOutput(fset *token.FileSet, f *ast.File) ([]byte, error) {
 	var buf bytes.Buffer
-	// cfg := printer.Config{Mode: printer.UseSpaces | printer.TabIndent, Tabwidth: 8}
 	cfg := printer.Config{Mode: printer.UseSpaces, Tabwidth: 4, Indent: 0}
 	err := cfg.Fprint(&buf, fset, f)
 	if err != nil {
@@ -67,19 +72,159 @@ func (t *IncreamentTrack) formatAST(fset *token.FileSet, f *ast.File) ([]byte, e
 	return t.content, nil
 }
 
+func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, error) {
+	var src bytes.Buffer
+	if err := printer.Fprint(&src, fset, f); err != nil {
+		return nil, err
+	}
+	frontStmts, backStmts, frontComments, backComments, insertLen := t.getContentsToInsert()
+
+	srcStr := src.String()
+	positionInsert := t.positionInserts
+	positionInsert.Sort()
+
+	// 对于每个插入位置，将打印语句插入到源代码字符串中
+	var buf bytes.Buffer
+	buf.Grow(len(srcStr) + insertLen)
+	posIdx := 0
+	lines := 0
+	i, j := 0, 0
+	for ; i < len(srcStr) && posIdx < len(positionInsert); i++ {
+		if lines == positionInsert[posIdx].positions-1 {
+			pos := positionInsert[posIdx]
+			buf.WriteString(srcStr[j:i])
+			if pos.position.IsFront() {
+				if len(frontStmts) > 0 {
+					buf.WriteString("// +goat:start")
+					buf.WriteByte('\n')
+					for _, content := range frontComments {
+						buf.WriteString(content)
+						buf.WriteByte('\n')
+					}
+					for _, content := range frontStmts {
+						buf.WriteString(content)
+						buf.WriteByte('\n')
+					}
+					buf.WriteString("// +goat:end")
+					buf.WriteByte('\n')
+				}
+
+			} else {
+				if len(backStmts) > 0 {
+					buf.WriteString("// +goat:start")
+					buf.WriteByte('\n')
+					for _, content := range backComments {
+						buf.WriteString(content)
+						buf.WriteByte('\n')
+					}
+					for _, content := range backStmts {
+						buf.WriteString(content)
+						buf.WriteByte('\n')
+					}
+					buf.WriteString("// +goat:end")
+					buf.WriteByte('\n')
+				}
+			}
+			j = i
+			posIdx++
+		} else if srcStr[i] == '\n' {
+			lines++
+		}
+	}
+	buf.WriteString(srcStr[i:])
+	t.content = buf.Bytes()
+	newFset, newF, err := t.getAstTree()
+	if err != nil {
+		return nil, err
+	}
+	return t.formatOutput(newFset, newF)
+}
+
+func (t *IncreamentTrack) getContentsToInsert() (
+	frontStmts []string, backStmts []string, frontComments []string, backComments []string, insertLen int) {
+	if t.provider != nil {
+		if t.provider.FrontTrackCodeProvider() != nil {
+			frontComments = t.provider.FrontTrackCodeProvider().Comments()
+			frontStmts = t.provider.FrontTrackCodeProvider().Stmts()
+		}
+		if t.provider.BackTrackCodeProvider() != nil {
+			backComments = t.provider.BackTrackCodeProvider().Comments()
+			backStmts = t.provider.BackTrackCodeProvider().Stmts()
+		}
+	}
+
+	for _, pos := range t.positionInserts {
+		if pos.position.IsFront() {
+			for _, comment := range frontComments {
+				insertLen += len(comment) + 1
+			}
+			for _, stmt := range frontStmts {
+				insertLen += len(stmt) + 1
+			}
+		} else {
+			for _, comment := range backComments {
+				insertLen += len(comment) + 1
+			}
+			for _, stmt := range backStmts {
+				insertLen += len(stmt) + 1
+			}
+		}
+	}
+	return
+}
+
+func (t *IncreamentTrack) checkAndInsert(position CodeInsertPosition, line int) {
+	if t.granularity.IsLine() {
+		t.checkAndInsertByLine(position, line)
+	} else if t.granularity.IsBlock() {
+		t.checkAndInsertStmtByBlock(position, line)
+	} else if t.granularity.IsFunc() {
+		t.checkAndInsertStmtByFunc(position, line)
+	}
+}
+
+func (t *IncreamentTrack) checkAndInsertStmtByFunc(position CodeInsertPosition, line int) {
+	lineChange := t.fileChange.LineChanges.Search(line)
+	if lineChange != -1 {
+		t.addInsert(position, CodeInsertTypeStmt, line)
+	}
+}
+
+func (t *IncreamentTrack) checkAndInsertByLine(position CodeInsertPosition, line int) {
+	lineChange := t.fileChange.LineChanges.Search(line)
+	if lineChange != -1 {
+		t.addInsert(position, CodeInsertTypeStmt, line)
+	}
+}
+
+func (t *IncreamentTrack) checkAndInsertStmtByBlock(position CodeInsertPosition, line int) {
+	lineChange := t.fileChange.LineChanges.Search(line)
+	if lineChange != -1 {
+		if t.lastBlockInsertLine != line-1 {
+			t.addInsert(position, CodeInsertTypeStmt, line)
+		}
+		t.lastBlockInsertLine = line
+	}
+}
+
+func (t *IncreamentTrack) addInsert(position CodeInsertPosition, codeType CodeInsertType, line int) {
+	t.positionInserts.Insert(position, codeType, line)
+	t.count++
+}
+
 func (t *IncreamentTrack) Track() (int, error) {
 	var err error
-	_, err = t.addImport()
-	if err != nil {
-		return 0, err
-	}
+	t.positionInserts.Reset()
 	_, err = t.addStmts()
 	if err != nil {
 		return 0, err
 	}
-	_, err = t.addComments()
-	if err != nil {
-		return 0, err
+	if t.count > 0 {
+		t.positionInserts.Reset()
+		_, err = t.addImport()
+		if err != nil {
+			return 0, err
+		}
 	}
 	return t.count, nil
 }
@@ -104,7 +249,7 @@ func (t *IncreamentTrack) addImport() ([]byte, error) {
 	if !found {
 		astutil.AddNamedImport(fset, f, alias, pkgPath)
 	}
-	return t.formatAST(fset, f)
+	return t.formatOutput(fset, f)
 }
 
 func (t *IncreamentTrack) addStmts() ([]byte, error) {
@@ -114,110 +259,76 @@ func (t *IncreamentTrack) addStmts() ([]byte, error) {
 	}
 	for _, decl := range f.Decls {
 		if decl, ok := decl.(*ast.FuncDecl); ok {
-			decl.Body.List = t.processStatements(decl.Body.List, fset)
+			t.processStatements(decl.Body.List, fset)
 		}
 	}
-	return t.formatAST(fset, f)
+	return t.doInsert(fset, f)
 }
 
 // processStatements analyzes and modifies statements by inserting additional code
 // nodes before each statement in the function body.
-func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.FileSet) []ast.Stmt {
+func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.FileSet) {
 	// 遍历函数体中的语句
-	newStatList := make([]ast.Stmt, 0, len(statList))
 	for _, stmt := range statList {
 		//可以根据语句类型进一步处理
-
 		switch s := stmt.(type) {
 		case *ast.AssignStmt:
-			ns := t.newStmt(CodeInjectTypeFront)
-			if ns != nil {
-				newStatList = append(newStatList, ns)
-			}
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			s.Rhs = t.analyzeAndModifyExpr(s.Rhs, fset)
 		case *ast.IfStmt:
-			s.Body.List = t.processStatements(s.Body.List, fset)
+			t.processStatements(s.Body.List, fset)
 			if s.Else != nil {
 				switch s.Else.(type) {
 				case *ast.IfStmt:
-					s.Else = t.processStatements([]ast.Stmt{s.Else.(*ast.IfStmt)}, fset)[0]
+					t.processStatements([]ast.Stmt{s.Else.(*ast.IfStmt)}, fset)
 				case *ast.BlockStmt:
 					block := s.Else.(*ast.BlockStmt)
-					block.List = t.processStatements(block.List, fset)
+					t.processStatements(block.List, fset)
 					s.Else = block
 				}
 			}
 		case *ast.ForStmt:
-			ns := t.newStmt(CodeInjectTypeFront)
-			if ns != nil {
-				newStatList = append(newStatList, ns)
-			}
-			s.Body.List = t.processStatements(s.Body.List, fset)
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.processStatements(s.Body.List, fset)
 		case *ast.RangeStmt:
-			ns := t.newStmt(CodeInjectTypeFront)
-			if ns != nil {
-				newStatList = append(newStatList, ns)
-			}
-			s.Body.List = t.processStatements(s.Body.List, fset)
+
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.processStatements(s.Body.List, fset)
 		case *ast.SwitchStmt:
-			ns := t.newStmt(CodeInjectTypeFront)
-			if ns != nil {
-				newStatList = append(newStatList, ns)
-			}
-			s.Body.List = t.processStatements(s.Body.List, fset)
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.processStatements(s.Body.List, fset)
 		case *ast.CommClause:
-			s.Body = t.processStatements(s.Body, fset)
+			t.processStatements(s.Body, fset)
 		case *ast.CaseClause:
-			s.Body = t.processStatements(s.Body, fset)
+			t.processStatements(s.Body, fset)
 		case *ast.BlockStmt:
-			ns := t.newStmt(CodeInjectTypeFront)
-			if ns != nil {
-				newStatList = append(newStatList, ns)
-			}
-			s.List = t.processStatements(s.List, fset)
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.processStatements(s.List, fset)
 		case *ast.ReturnStmt:
-			ns := t.newStmt(CodeInjectTypeFront)
-			if ns != nil {
-				newStatList = append(newStatList, ns)
-			}
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			for i, result := range s.Results {
 				s.Results[i] = t.analyzeAndModifyExpr([]ast.Expr{result}, fset)[0]
 			}
 		case *ast.DeferStmt:
-			ns := t.newStmt(CodeInjectTypeFront)
-			if ns != nil {
-				newStatList = append(newStatList, ns)
-			}
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			if s.Call != nil && s.Call.Fun != nil {
 				s.Call.Fun = t.analyzeAndModifyExpr([]ast.Expr{s.Call.Fun}, fset)[0]
 			}
 		case *ast.SelectStmt:
-			ns := t.newStmt(CodeInjectTypeFront)
-			if ns != nil {
-				newStatList = append(newStatList, ns)
-			}
-			s.Body.List = t.processStatements(s.Body.List, fset)
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.processStatements(s.Body.List, fset)
 		case *ast.GoStmt:
-			ns := t.newStmt(CodeInjectTypeFront)
-			if ns != nil {
-				newStatList = append(newStatList, ns)
-			}
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			if s.Call != nil && s.Call.Fun != nil {
 				s.Call.Fun = t.analyzeAndModifyExpr([]ast.Expr{s.Call.Fun}, fset)[0]
 			}
 		case *ast.TypeSwitchStmt:
-			ns := t.newStmt(CodeInjectTypeFront)
-			if ns != nil {
-				newStatList = append(newStatList, ns)
-			}
-			s.Body.List = t.processStatements(s.Body.List, fset)
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.processStatements(s.Body.List, fset)
 		case *ast.ExprStmt:
 			switch s.X.(type) {
 			case *ast.CallExpr:
-				ns := t.newStmt(CodeInjectTypeFront)
-				if ns != nil {
-					newStatList = append(newStatList, ns)
-				}
+				t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 				expr := s.X.(*ast.CallExpr)
 				if expr.Fun != nil {
 					expr.Fun = t.analyzeAndModifyExpr([]ast.Expr{expr.Fun}, fset)[0]
@@ -225,14 +336,9 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 			default:
 			}
 		default:
-			ns := t.newStmt(CodeInjectTypeFront)
-			if ns != nil {
-				newStatList = append(newStatList, ns)
-			}
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 		}
-		newStatList = append(newStatList, stmt)
 	}
-	return newStatList
 }
 
 // analyzeAndModifyExpr analyzes and modifies expressions by processing any function literals found.
@@ -242,136 +348,11 @@ func (t *IncreamentTrack) analyzeAndModifyExpr(exprList []ast.Expr, fset *token.
 	for _, expr := range exprList {
 		switch expr := expr.(type) {
 		case *ast.FuncLit:
-			expr.Body.List = t.processStatements(expr.Body.List, fset)
+			t.processStatements(expr.Body.List, fset)
 		}
 		newExprList = append(newExprList, expr)
 	}
 	return newExprList
-}
-
-func (t *IncreamentTrack) addComments() ([]byte, error) {
-	fset, f, err := t.getAstTree()
-	if err != nil {
-		return nil, err
-	}
-	for _, decl := range f.Decls {
-		if decl, ok := decl.(*ast.FuncDecl); ok {
-			t.newComment(f, decl.Pos()-1, CodeInjectTypeFront)
-			decl.Body.List = t.processComment(f, decl.Body.List, fset)
-		}
-	}
-	return t.formatAST(fset, f)
-}
-
-func (t *IncreamentTrack) processComment(f *ast.File, statList []ast.Stmt, fset *token.FileSet) []ast.Stmt {
-	// 遍历函数体中的语句
-	newStatList := make([]ast.Stmt, 0, len(statList))
-	for _, stmt := range statList {
-		if _, ok := stmt.(*ast.IfStmt); !ok {
-			t.newComment(f, stmt.Pos()-1, CodeInjectTypeFront)
-		}
-		// t.insertComment(f, stmt.Pos()-1)
-		//可以根据语句类型进一步处理
-		switch s := stmt.(type) {
-		case *ast.AssignStmt:
-			s.Rhs = t.analyzeAndModifyExprAndInsertComment(f, s.Rhs, fset)
-		case *ast.IfStmt:
-			t.newComment(f, s.Body.Lbrace, CodeInjectTypeFront)
-			s.Body.List = t.processComment(f, s.Body.List, fset)
-			if s.Else != nil {
-				switch s.Else.(type) {
-				case *ast.IfStmt:
-					s.Else = t.processComment(f, []ast.Stmt{s.Else.(*ast.IfStmt)}, fset)[0]
-				case *ast.BlockStmt:
-					t.newComment(f, s.Else.Pos(), CodeInjectTypeFront)
-					block := s.Else.(*ast.BlockStmt)
-					block.List = t.processComment(f, block.List, fset)
-
-					s.Else = block
-				}
-			}
-		case *ast.ForStmt:
-			s.Body.List = t.processComment(f, s.Body.List, fset)
-		case *ast.RangeStmt:
-			s.Body.List = t.processComment(f, s.Body.List, fset)
-		case *ast.SwitchStmt:
-			s.Body.List = t.processComment(f, s.Body.List, fset)
-		case *ast.CommClause:
-			s.Body = t.processComment(f, s.Body, fset)
-		case *ast.CaseClause:
-			s.Body = t.processComment(f, s.Body, fset)
-		case *ast.BlockStmt:
-			s.List = t.processComment(f, s.List, fset)
-		case *ast.ReturnStmt:
-			for i, result := range s.Results {
-				s.Results[i] = t.analyzeAndModifyExprAndInsertComment(f, []ast.Expr{result}, fset)[0]
-			}
-		case *ast.DeferStmt:
-			if s.Call != nil && s.Call.Fun != nil {
-				s.Call.Fun = t.analyzeAndModifyExprAndInsertComment(f, []ast.Expr{s.Call.Fun}, fset)[0]
-			}
-		case *ast.SelectStmt:
-			s.Body.List = t.processComment(f, s.Body.List, fset)
-		case *ast.GoStmt:
-			if s.Call != nil && s.Call.Fun != nil {
-				s.Call.Fun = t.analyzeAndModifyExprAndInsertComment(f, []ast.Expr{s.Call.Fun}, fset)[0]
-			}
-		case *ast.TypeSwitchStmt:
-			s.Body.List = t.processComment(f, s.Body.List, fset)
-		case *ast.ExprStmt:
-			switch s.X.(type) {
-			case *ast.CallExpr:
-				expr := s.X.(*ast.CallExpr)
-				if expr.Fun != nil {
-					expr.Fun = t.analyzeAndModifyExprAndInsertComment(f, []ast.Expr{expr.Fun}, fset)[0]
-				}
-			}
-		}
-		newStatList = append(newStatList, stmt)
-	}
-	return newStatList
-}
-
-func (t *IncreamentTrack) analyzeAndModifyExprAndInsertComment(f *ast.File, exprList []ast.Expr, fset *token.FileSet) []ast.Expr {
-	newExprList := make([]ast.Expr, 0, len(exprList))
-	for _, expr := range exprList {
-		switch expr := expr.(type) {
-		case *ast.FuncLit:
-			expr.Body.List = t.processComment(f, expr.Body.List, fset)
-		}
-		newExprList = append(newExprList, expr)
-	}
-	return newExprList
-}
-
-func (t *IncreamentTrack) newComment(f *ast.File, pos token.Pos, codeType CodeInjectType) {
-	var provider TrackCodeProvider
-	if codeType == CodeInjectTypeFront {
-		provider = t.provider.FrontTrackCodeProvider()
-	} else {
-		provider = t.provider.BackTrackCodeProvider()
-	}
-	if provider != nil {
-		cm := provider.Comments()
-		if cm != nil && len(cm.List) > 0 {
-			cm.List[0].Slash = pos
-			f.Comments = append(f.Comments, cm)
-		}
-	}
-}
-
-func (t *IncreamentTrack) newStmt(codeType CodeInjectType) ast.Stmt {
-	var provider TrackCodeProvider
-	if codeType == CodeInjectTypeFront {
-		provider = t.provider.FrontTrackCodeProvider()
-	} else {
-		provider = t.provider.BackTrackCodeProvider()
-	}
-	if provider != nil {
-		t.count++
-		return provider.Stmt()
-	}
-	return nil
 }
 
 // --- Interface Implementations ---
@@ -384,7 +365,7 @@ type incrementTemplateProvider struct {
 
 func defaultIncrementTemplateProvider() *incrementTemplateProvider {
 	return &incrementTemplateProvider{
-		frontCodeProvider: &incrementCodeProvider{codeType: CodeInjectTypeFront},
+		frontCodeProvider: &incrementCodeProvider{position: CodeInsertPositionFront},
 		// backCodeProvider:  &incrementCodeProvider{codeType: CodeInjectTypeBack},
 	}
 }
@@ -406,48 +387,23 @@ func (p *incrementTemplateProvider) BackTrackCodeProvider() TrackCodeProvider {
 
 // incrementCodeProvider implements TrackCodeProvider
 type incrementCodeProvider struct {
-	codeType CodeInjectType
+	position CodeInsertPosition
 	// Add other fields if needed, e.g., specific comments or statement details
 }
 
-func (p *incrementCodeProvider) Type() CodeInjectType {
-	return p.codeType
+func (p *incrementCodeProvider) Position() CodeInsertPosition {
+	return p.position
 }
 
-func (p *incrementCodeProvider) Comments() *ast.CommentGroup {
+func (p *incrementCodeProvider) Comments() []string {
 	// Example: Return a specific comment or nil
-	return &ast.CommentGroup{
-		List: []*ast.Comment{
-			{
-				Text: "// +goat:track",
-			},
-		},
-	}
+	return []string{"// +goat:track"}
 }
 
-func (p *incrementCodeProvider) Stmt() ast.Stmt {
-	// Example: Return the fmt.Println statement node
-	// This could be made more dynamic based on provider configuration
-	return &ast.ExprStmt{
-		X: &ast.CallExpr{
-			Fun: &ast.SelectorExpr{
-				X:   ast.NewIdent("goat"), // Assumes "fmt" is imported
-				Sel: ast.NewIdent("Track"),
-			},
-			Args: []ast.Expr{
-				&ast.BasicLit{
-					Kind:  token.STRING,
-					Value: `TRACK_ID`, // Example tracking message
-				},
-			},
-		},
-	}
-}
-
-func (p *incrementCodeProvider) StmtValue() string {
+func (p *incrementCodeProvider) Stmts() []string {
 	// Example: Return the string representation of the statement
 	// Ideally, this should format the Stmt() result, but for simplicity:
-	return `goat.Track(TRACK_ID)`
+	return []string{`goat.Track(TRACK_ID)`}
 }
 
 // Ensure the new types implement the interfaces (compile-time check)

@@ -32,10 +32,10 @@ func main() {
 	sort.Slice(changes, func(i, j int) bool {
 		return changes[i].Path < changes[j].Path
 	})
-	for _, change := range changes {
-		log.Printf("change: %v", change)
-	}
-	track, err := tracking.NewIncreamentTrack(*projectPath, changes[0], nil)
+	// for _, change := range changes {
+	// 	log.Printf("change: %v", change)
+	// }
+	track, err := tracking.NewIncreamentTrack(*projectPath, changes[5], nil, tracking.GranularityLine)
 	if err != nil {
 		log.Fatalf("failed to create track: %v", err)
 	}
@@ -43,6 +43,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to track: %v", err)
 	}
-	log.Printf("tracked %d files", n)
+	log.Printf("tracked %d lines", n)
 	fmt.Printf("%s", track.Bytes())
 }

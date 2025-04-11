@@ -16,14 +16,25 @@ type DifferInterface interface {
 
 // FileChange represents file change information
 type FileChange struct {
-	Path        string       `json:"path"` // file path
-	LineChanges []LineChange `json:"line_changes"`
+	Path        string      `json:"path"` // file path
+	LineChanges LineChanges `json:"line_changes"`
 }
 
 // LineChange represents line-level change information
 type LineChange struct {
 	Start int `json:"start"` // starting line number of new code
 	Lines int `json:"lines"` // number of lines of new code
+}
+
+type LineChanges []LineChange
+
+func (l LineChanges) Search(line int) int {
+	for i, change := range l {
+		if line >= change.Start && line <= change.Start+change.Lines-1 {
+			return i
+		}
+	}
+	return -1
 }
 
 // resolveRef resolves a reference (branch name or commit hash) to a commit hash
