@@ -446,9 +446,9 @@ func (p *incrementCodeProvider) Stmts() []string {
 var _ TrackTemplateProvider = (*incrementTemplateProvider)(nil)
 var _ TrackCodeProvider = (*incrementCodeProvider)(nil)
 
-func IncrementReplace(start int) func(older string) (newer string) {
+func IncrementReplace(ident string, start int) func(older string) (newer string) {
 	return func(older string) (newer string) {
-		newer = fmt.Sprintf("%s_%d", older, start)
+		newer = fmt.Sprintf(`%s.Track(TRACK_ID_%d)`, ident, start)
 		start++
 		return
 	}

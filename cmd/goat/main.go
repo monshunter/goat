@@ -8,6 +8,7 @@ import (
 
 	"github.com/monshunter/goat/pkg/diff"
 	"github.com/monshunter/goat/pkg/tracking"
+	"github.com/monshunter/goat/pkg/tracking/increament"
 )
 
 func main() {
@@ -45,10 +46,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to track:%s %v", change.Path, err)
 	}
-	count, err := track.Replace("TRACK_ID", tracking.IncrementReplace(10))
+	start := 10
+	count, err := track.Replace(`goat.Track(TRACK_ID)`, tracking.IncrementReplace("goat", start))
 	if err != nil {
 		log.Fatalf("failed to calibrate:%s %v", change.Path, err)
 	}
 	log.Printf("tracked %d lines, replaced %d times", n, count)
 	fmt.Printf("%s", track.Bytes())
+	values := increament.NewValues("goat", "1.0.0", "goat", false)
+	idx := make([]int, count)
+	for i := 0; i < count; i++ {
+		idx[i] = i + start
+	}
+	values.AddTrackIds(idx)
+	values.AddComponent(1, "LoginComponent", idx[:len(idx)/2])
+	values.AddComponent(2, "DashboardComponent", idx[len(idx)/2:])
+	values.Save("tmp/track.go")
 }
