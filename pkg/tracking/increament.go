@@ -2,12 +2,14 @@ package tracking
 
 import (
 	"bytes"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/printer"
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/monshunter/goat/pkg/diff"
@@ -229,8 +231,42 @@ func (t *IncreamentTrack) Track() (int, error) {
 	return t.count, nil
 }
 
+func (t *IncreamentTrack) Replace(target string, replace func(older string) (newer string)) (int, error) {
+	if len(t.content) == 0 {
+		return 0, fmt.Errorf("no content to calibrate")
+	}
+
+	content := string(t.content)
+	// 使用正则表达式进行替换，确保每次替换都调用replace函数
+	re := regexp.MustCompile(regexp.QuoteMeta(target))
+	count := len(re.FindAllString(content, -1))
+	newContent := re.ReplaceAllStringFunc(content, func(match string) string {
+		return replace(match)
+	})
+
+	// 更新内容
+	t.content = []byte(newContent)
+	return count, nil
+}
+
 func (t *IncreamentTrack) Bytes() []byte {
 	return t.content
+}
+
+func (t *IncreamentTrack) Save(path string) error {
+	perm := os.FileMode(0644)
+	if path == "" {
+		path = t.fileName
+		fileInfo, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		if fileInfo.IsDir() {
+			return fmt.Errorf("path is a directory: %s", path)
+		}
+		perm = fileInfo.Mode().Perm()
+	}
+	return os.WriteFile(path, t.content, perm)
 }
 
 func (t *IncreamentTrack) addImport() ([]byte, error) {
@@ -409,3 +445,11 @@ func (p *incrementCodeProvider) Stmts() []string {
 // Ensure the new types implement the interfaces (compile-time check)
 var _ TrackTemplateProvider = (*incrementTemplateProvider)(nil)
 var _ TrackCodeProvider = (*incrementCodeProvider)(nil)
+
+func IncrementReplace(start int) func(older string) (newer string) {
+	return func(older string) (newer string) {
+		newer = fmt.Sprintf("%s_%d", older, start)
+		start++
+		return
+	}
+}

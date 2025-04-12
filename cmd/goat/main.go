@@ -32,17 +32,23 @@ func main() {
 	sort.Slice(changes, func(i, j int) bool {
 		return changes[i].Path < changes[j].Path
 	})
-	// for _, change := range changes {
-	// 	log.Printf("change: %v", change)
-	// }
-	track, err := tracking.NewIncreamentTrack(*projectPath, changes[5], nil, tracking.GranularityLine)
+	for _, change := range changes {
+		log.Printf("change: %v", change)
+	}
+	change := changes[1]
+	var track tracking.Tracker
+	track, err = tracking.NewIncreamentTrack(*projectPath, change, nil, tracking.GranularityLine)
 	if err != nil {
-		log.Fatalf("failed to create track: %v", err)
+		log.Fatalf("failed to create track:%s %v", change.Path, err)
 	}
 	n, err := track.Track()
 	if err != nil {
-		log.Fatalf("failed to track: %v", err)
+		log.Fatalf("failed to track:%s %v", change.Path, err)
 	}
-	log.Printf("tracked %d lines", n)
+	count, err := track.Replace("TRACK_ID", tracking.IncrementReplace(10))
+	if err != nil {
+		log.Fatalf("failed to calibrate:%s %v", change.Path, err)
+	}
+	log.Printf("tracked %d lines, replaced %d times", n, count)
 	fmt.Printf("%s", track.Bytes())
 }
