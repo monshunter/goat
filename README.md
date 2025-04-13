@@ -69,26 +69,28 @@ goat
 
 #### 2.2.2 子命令
 
-1. **patch** - 插入埋点
+1. **init** - 插入埋点
 
 ```
-goat patch <project> <stableBranch> <publishBranch> [--newBranch <branchName>] [--bin <bin>]
+goat init <project> --stable master --publish "release-1.32"
+```
+
+2. **patch** - 插入埋点
+
+```
+goat patch <project> 
 ```
 
 参数说明：
 - `<project>`：目标项目的路径，即/path/to/project
-- `<stableBranch>`：稳定运行的分支名称或commit ID
-- `<publishBranch>`：用于进行灰度发布的分支或commit ID
-- `--newBranch <branchName>`：（可选）通过publishBranch生成的隔离分支，用于进行埋点代码插入，若未指定则默认为"<publishBranch>-goat"
-- `--bin <bin>`：（可选）指定需要为项目中的哪个二进制执行埋点，若未指定，默认为所有main包
 
-2. **fix** - 修复埋点
+3. **fix** - 修复埋点
 
 ```
 goat fix <project>
 ```
 
-3. **clean** - 清理埋点
+4. **clean** - 清理埋点
 
 ```
 goat clean <project>

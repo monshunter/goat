@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/diff"
 	"golang.org/x/tools/go/ast/astutil"
 )
@@ -25,11 +26,11 @@ type IncreamentTrack struct {
 	fileName            string
 	positionInserts     InsertPositions
 	lastBlockInsertLine int
-	granularity         Granularity
+	granularity         config.Granularity
 }
 
 func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
-	provider TrackTemplateProvider, granularity Granularity) (*IncreamentTrack, error) {
+	provider TrackTemplateProvider, granularity config.Granularity) (*IncreamentTrack, error) {
 	fileName := fileChange.Path
 	if !filepath.IsAbs(fileName) {
 		fileName = filepath.Join(basePath, fileName)
@@ -97,8 +98,6 @@ func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, er
 			buf.WriteString(srcStr[j:i])
 			if pos.position.IsFront() {
 				if len(frontStmts) > 0 {
-					buf.WriteString("// +goat:start")
-					buf.WriteByte('\n')
 					for _, content := range frontComments {
 						buf.WriteString(content)
 						buf.WriteByte('\n')
@@ -107,14 +106,10 @@ func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, er
 						buf.WriteString(content)
 						buf.WriteByte('\n')
 					}
-					buf.WriteString("// +goat:end")
-					buf.WriteByte('\n')
 				}
 
 			} else {
 				if len(backStmts) > 0 {
-					buf.WriteString("// +goat:start")
-					buf.WriteByte('\n')
 					for _, content := range backComments {
 						buf.WriteString(content)
 						buf.WriteByte('\n')
@@ -123,8 +118,6 @@ func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, er
 						buf.WriteString(content)
 						buf.WriteByte('\n')
 					}
-					buf.WriteString("// +goat:end")
-					buf.WriteByte('\n')
 				}
 			}
 			j = i
@@ -274,7 +267,7 @@ func (t *IncreamentTrack) addImport() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, pkgPath, alias := t.provider.ImportSpec()
+	pkgPath, alias := t.provider.ImportSpec()
 	found := false
 	for _, ipt := range f.Imports {
 		if strings.Trim(ipt.Path.Value, "\"") == pkgPath {
@@ -402,13 +395,12 @@ type incrementTemplateProvider struct {
 func defaultIncrementTemplateProvider() *incrementTemplateProvider {
 	return &incrementTemplateProvider{
 		frontCodeProvider: &incrementCodeProvider{position: CodeInsertPositionFront},
-		// backCodeProvider:  &incrementCodeProvider{codeType: CodeInjectTypeBack},
 	}
 }
 
-func (p *incrementTemplateProvider) ImportSpec() (pkgName, pkgPath, alias string) {
+func (p *incrementTemplateProvider) ImportSpec() (pkgPath, alias string) {
 	// Example: Use "fmt" package for Println
-	return "context", "context", "ctx"
+	return "github.com/monshunter/goat", ""
 }
 
 func (p *incrementTemplateProvider) FrontTrackCodeProvider() TrackCodeProvider {
@@ -446,10 +438,17 @@ func (p *incrementCodeProvider) Stmts() []string {
 var _ TrackTemplateProvider = (*incrementTemplateProvider)(nil)
 var _ TrackCodeProvider = (*incrementCodeProvider)(nil)
 
-func IncrementReplace(ident string, start int) func(older string) (newer string) {
+func IncreamentReplaceStmt(ident string, start int) func(older string) (newer string) {
 	return func(older string) (newer string) {
 		newer = fmt.Sprintf(`%s.Track(TRACK_ID_%d)`, ident, start)
 		start++
+		return
+	}
+}
+
+func IncreamentReplaceImport(alias string, importPath string) func(older string) (newer string) {
+	return func(older string) (newer string) {
+		newer = fmt.Sprintf(`%s "%s"`, alias, importPath)
 		return
 	}
 }

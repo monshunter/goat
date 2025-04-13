@@ -1,12 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"sort"
 
+	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/diff"
+	"github.com/monshunter/goat/pkg/maininfo"
 	"github.com/monshunter/goat/pkg/tracking"
 	"github.com/monshunter/goat/pkg/tracking/increament"
 )
@@ -36,9 +39,21 @@ func main() {
 	for _, change := range changes {
 		log.Printf("change: %v", change)
 	}
+
+	mainInfo, err := maininfo.NewMainInfo(*projectPath)
+	if err != nil {
+		log.Fatalf("failed to create main info: %v", err)
+	}
+	result, err := json.MarshalIndent(mainInfo, "", "  ")
+	if err != nil {
+		log.Fatalf("failed to marshal main info: %v", err)
+	}
+	_ = result
+	// log.Printf("main info: %s", string(result))
+	// return
 	change := changes[1]
 	var track tracking.Tracker
-	track, err = tracking.NewIncreamentTrack(*projectPath, change, nil, tracking.GranularityLine)
+	track, err = tracking.NewIncreamentTrack(*projectPath, change, nil, config.GranularityLine)
 	if err != nil {
 		log.Fatalf("failed to create track:%s %v", change.Path, err)
 	}
@@ -47,7 +62,8 @@ func main() {
 		log.Fatalf("failed to track:%s %v", change.Path, err)
 	}
 	start := 10
-	count, err := track.Replace(`goat.Track(TRACK_ID)`, tracking.IncrementReplace("goat", start))
+	_, err = track.Replace(`"github.com/monshunter/goat"`, tracking.IncreamentReplaceImport("goat", "github.com/monshunter/goat"))
+	count, err := track.Replace(`goat.Track(TRACK_ID)`, tracking.IncreamentReplaceStmt("goat", start))
 	if err != nil {
 		log.Fatalf("failed to calibrate:%s %v", change.Path, err)
 	}

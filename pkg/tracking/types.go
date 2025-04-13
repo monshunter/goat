@@ -10,40 +10,6 @@ type Tracker interface {
 	Save(path string) error
 }
 
-type Granularity int
-
-const (
-	GranularityLine  Granularity = 1
-	GranularityBlock Granularity = 2
-	GranularityFunc  Granularity = 3
-)
-
-const (
-	GranularityLineStr  = "line"
-	GranularityBlockStr = "block"
-	GranularityFuncStr  = "func"
-)
-
-func (g Granularity) String() string {
-	return []string{GranularityLineStr, GranularityBlockStr, GranularityFuncStr}[g-1]
-}
-
-func (g Granularity) Int() int {
-	return int(g)
-}
-
-func (g Granularity) IsLine() bool {
-	return g == GranularityLine
-}
-
-func (g Granularity) IsBlock() bool {
-	return g == GranularityBlock
-}
-
-func (g Granularity) IsFunc() bool {
-	return g == GranularityFunc
-}
-
 type CodeInsertPosition int
 
 const (
@@ -107,7 +73,7 @@ type TrackCodeProvider interface {
 }
 
 type TrackTemplateProvider interface {
-	ImportSpec() (pkgName, pkgPath, alias string)
+	ImportSpec() (pkgPath, alias string)
 	FrontTrackCodeProvider() TrackCodeProvider
 	BackTrackCodeProvider() TrackCodeProvider
 }
