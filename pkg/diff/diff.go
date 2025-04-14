@@ -2,7 +2,6 @@ package diff
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/go-git/go-git/v5"
@@ -155,7 +154,7 @@ func (d *Differ) analyzeChange(change *object.Change) (*FileChange, error) {
 // handleInsert handles insert or modify operations
 func (d *Differ) handleInsert(change *object.Change) (*FileChange, error) {
 	fileName := change.To.Name
-	if !strings.HasSuffix(fileName, ".go") || strings.HasSuffix(fileName, "_test.go") {
+	if !isGoFile(fileName) {
 		return nil, nil
 	}
 	fc := FileChange{

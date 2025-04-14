@@ -7,6 +7,7 @@ type Tracker interface {
 	Track() (int, error)
 	Replace(target string, replace func(older string) (newer string)) (int, error)
 	Bytes() []byte
+	Count() int
 	Save(path string) error
 }
 

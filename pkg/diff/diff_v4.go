@@ -142,20 +142,12 @@ func (d *DifferV4) analyzeChange(change *object.Change) (*FileChange, error) {
 	}
 }
 
-func (d *DifferV4) getDeleteChanges(changes []*object.Change) []*object.Change {
-	deleteChanges := make([]*object.Change, 0)
-	for _, change := range changes {
-		action, _ := change.Action()
-		if action == merkletrie.Delete {
-			deleteChanges = append(deleteChanges, change)
-		}
-	}
-	return deleteChanges
-}
-
 // handleInsert handles insert or modify operations
 func (d *DifferV4) handleInsert(change *object.Change) (*FileChange, error) {
 	fileName := change.To.Name
+	if !isGoFile(fileName) {
+		return nil, nil
+	}
 	patch, err := change.Patch()
 	if err != nil || patch == nil {
 		return nil, err

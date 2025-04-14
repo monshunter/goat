@@ -2,7 +2,6 @@ package diff
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/go-git/go-git/v5"
@@ -132,7 +131,7 @@ func (d *DifferV2) analyzeChange(filePatch diff.FilePatch) *FileChange {
 	if (from == nil && to == nil) || (from != nil && to == nil) {
 		return nil
 	}
-	if !strings.HasSuffix(to.Path(), ".go") || strings.HasSuffix(to.Path(), "_test.go") {
+	if !isGoFile(to.Path()) {
 		return nil
 	}
 	lineChanges := getLineChange(filePatch)

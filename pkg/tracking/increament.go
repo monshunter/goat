@@ -4,18 +4,20 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/printer"
 	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/diff"
-	"golang.org/x/tools/go/ast/astutil"
+	"github.com/monshunter/goat/pkg/utils"
 )
+
+const DefaultImportPath = `github.com/monshunter/goat/goat`
+const DefaultImportAlias = `goat`
+const DefaultTrackStmt = `goat.Track(TRACK_ID)`
 
 type IncreamentTrack struct {
 	basePath            string
@@ -53,26 +55,6 @@ func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
 		positionInserts: InsertPositions{},
 		granularity:     granularity,
 	}, nil
-}
-
-func (t *IncreamentTrack) getAstTree() (*token.FileSet, *ast.File, error) {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "", t.content, parser.ParseComments)
-	if err != nil {
-		return nil, nil, err
-	}
-	return fset, f, nil
-}
-
-func (t *IncreamentTrack) formatOutput(fset *token.FileSet, f *ast.File) ([]byte, error) {
-	var buf bytes.Buffer
-	cfg := printer.Config{Mode: printer.UseSpaces, Tabwidth: 4, Indent: 0}
-	err := cfg.Fprint(&buf, fset, f)
-	if err != nil {
-		return nil, err
-	}
-	t.content = buf.Bytes()
-	return t.content, nil
 }
 
 func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, error) {
@@ -128,11 +110,16 @@ func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, er
 	}
 	buf.WriteString(srcStr[i:])
 	t.content = buf.Bytes()
-	newFset, newF, err := t.getAstTree()
+	newFset, newF, err := utils.GetAstTree("", t.content)
 	if err != nil {
 		return nil, err
 	}
-	return t.formatOutput(newFset, newF)
+	content, err := utils.FormatAst(newFset, newF)
+	if err != nil {
+		return nil, err
+	}
+	t.content = content
+	return t.content, nil
 }
 
 func (t *IncreamentTrack) getContentsToInsert() (
@@ -216,12 +203,18 @@ func (t *IncreamentTrack) Track() (int, error) {
 	}
 	if t.count > 0 {
 		t.positionInserts.Reset()
-		_, err = t.addImport()
+		pkgPath, alias := t.provider.ImportSpec()
+		content, err := utils.AddImport(pkgPath, alias, t.fileName, t.content)
 		if err != nil {
 			return 0, err
 		}
+		t.content = content
 	}
 	return t.count, nil
+}
+
+func (t *IncreamentTrack) Count() int {
+	return t.count
 }
 
 func (t *IncreamentTrack) Replace(target string, replace func(older string) (newer string)) (int, error) {
@@ -262,27 +255,32 @@ func (t *IncreamentTrack) Save(path string) error {
 	return os.WriteFile(path, t.content, perm)
 }
 
-func (t *IncreamentTrack) addImport() ([]byte, error) {
-	fset, f, err := t.getAstTree()
-	if err != nil {
-		return nil, err
-	}
-	pkgPath, alias := t.provider.ImportSpec()
-	found := false
-	for _, ipt := range f.Imports {
-		if strings.Trim(ipt.Path.Value, "\"") == pkgPath {
-			found = true
-			break
-		}
-	}
-	if !found {
-		astutil.AddNamedImport(fset, f, alias, pkgPath)
-	}
-	return t.formatOutput(fset, f)
-}
+// func (t *IncreamentTrack) addImport() ([]byte, error) {
+// 	fset, f, err := utils.GetAstTree("", t.content)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	pkgPath, alias := t.provider.ImportSpec()
+// 	found := false
+// 	for _, ipt := range f.Imports {
+// 		if strings.Trim(ipt.Path.Value, "\"") == pkgPath {
+// 			found = true
+// 			break
+// 		}
+// 	}
+// 	if !found {
+// 		astutil.AddNamedImport(fset, f, alias, pkgPath)
+// 	}
+// 	content, err := utils.FormatAst(fset, f)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	t.content = content
+// 	return t.content, nil
+// }
 
 func (t *IncreamentTrack) addStmts() ([]byte, error) {
-	fset, f, err := t.getAstTree()
+	fset, f, err := utils.GetAstTree("", t.content)
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +398,7 @@ func defaultIncrementTemplateProvider() *incrementTemplateProvider {
 
 func (p *incrementTemplateProvider) ImportSpec() (pkgPath, alias string) {
 	// Example: Use "fmt" package for Println
-	return "github.com/monshunter/goat", ""
+	return DefaultImportPath, ""
 }
 
 func (p *incrementTemplateProvider) FrontTrackCodeProvider() TrackCodeProvider {
@@ -431,7 +429,7 @@ func (p *incrementCodeProvider) Comments() []string {
 func (p *incrementCodeProvider) Stmts() []string {
 	// Example: Return the string representation of the statement
 	// Ideally, this should format the Stmt() result, but for simplicity:
-	return []string{`goat.Track(TRACK_ID)`}
+	return []string{DefaultTrackStmt}
 }
 
 // Ensure the new types implement the interfaces (compile-time check)
@@ -440,7 +438,7 @@ var _ TrackCodeProvider = (*incrementCodeProvider)(nil)
 
 func IncreamentReplaceStmt(ident string, start int) func(older string) (newer string) {
 	return func(older string) (newer string) {
-		newer = fmt.Sprintf(`%s.Track(TRACK_ID_%d)`, ident, start)
+		newer = fmt.Sprintf(`%s.Track(%s.TRACK_ID_%d)`, ident, ident, start)
 		start++
 		return
 	}

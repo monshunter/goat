@@ -2,19 +2,22 @@ package config
 
 import (
 	"fmt"
+	"html/template"
 	"os"
 	"path/filepath"
 	"runtime"
 
+	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v3"
 )
 
 type Granularity int
 
 const (
-	GranularityLine  Granularity = 1
-	GranularityBlock Granularity = 2
-	GranularityFunc  Granularity = 3
+	_ Granularity = iota
+	GranularityLine
+	GranularityBlock
+	GranularityFunc
 )
 
 const (
@@ -22,6 +25,23 @@ const (
 	GranularityBlockStr = "block"
 	GranularityFuncStr  = "func"
 )
+
+func ToGranularity(s string) (Granularity, error) {
+	switch s {
+	case GranularityLineStr:
+		return GranularityLine, nil
+	case GranularityBlockStr:
+		return GranularityBlock, nil
+	case GranularityFuncStr:
+		return GranularityFunc, nil
+	default:
+		return 0, fmt.Errorf("invalid granularity: %s", s)
+	}
+}
+
+func (g Granularity) IsValid() bool {
+	return g == GranularityLine || g == GranularityBlock || g == GranularityFunc
+}
 
 func (g Granularity) String() string {
 	return []string{GranularityLineStr, GranularityBlockStr, GranularityFuncStr}[g-1]
@@ -45,6 +65,10 @@ func (g Granularity) IsFunc() bool {
 
 // Config configuration struct
 type Config struct {
+	// App name
+	AppName string `yaml:"appName"` // goat
+	// App version
+	AppVersion string `yaml:"appVersion"` // 1.0.0
 	// Root path
 	ProjectRoot string `yaml:"projectRoot"` // absolute path
 	// Stable branch name
@@ -60,9 +84,9 @@ type Config struct {
 	// Goat package path
 	GoatPackagePath string `yaml:"goatPackagePath"`
 	// Granularity
-	Granularity *string `yaml:"granularity"` // line, block, func
-	// Precision
-	DiffPrecision *int `yaml:"diffPrecision"` // 1~4
+	Granularity string `yaml:"granularity"` // line, block, func
+	// Diff precision
+	DiffPrecision int `yaml:"diffPrecision"` // 1~2, 3&4 is not supported
 	// Threads
 	Threads int `yaml:"threads"` // 1~128
 	// Race
@@ -70,9 +94,92 @@ type Config struct {
 	// Clone branch
 	CloneBranch bool `yaml:"cloneBranch"` // true, false
 	// Main packages to track
-	MainPackages []string `yaml:"mainPackages"`
+	MainEntries []string `yaml:"mainEntries"`
 	// Main package coverage strategy
-	MainPackageTrackStrategy string `yaml:"mainPackageTrackStrategy"` // all, package // default: all
+	TrackStrategy string `yaml:"trackStrategy"` // project, package // default: project
+
+}
+
+func (c *Config) Validate() error {
+	if c.Granularity == "" {
+		c.Granularity = GranularityBlockStr
+	}
+	_, err := ToGranularity(c.Granularity)
+	if err != nil {
+		return fmt.Errorf("invalid granularity: %w", err)
+	}
+
+	if c.DiffPrecision < 1 || c.DiffPrecision > 2 {
+		return fmt.Errorf("invalid diff precision: %d", c.DiffPrecision)
+	}
+
+	if c.Threads <= 0 {
+		c.Threads = runtime.NumCPU()
+	}
+
+	if c.ProjectRoot == "" {
+		return fmt.Errorf("project root is required")
+	}
+
+	projectRoot, err := filepath.Abs(c.ProjectRoot)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path: %w", err)
+	}
+	c.ProjectRoot = projectRoot
+
+	if c.StableBranch == "" {
+		c.StableBranch = "main"
+	}
+
+	if c.PublishBranch == "" {
+		c.PublishBranch = "HEAD"
+	}
+
+	if c.Ignores == nil {
+		c.Ignores = []string{".git", ".gitignore", ".DS_Store", ".idea", ".vscode", ".venv"}
+	}
+
+	if c.MainEntries == nil {
+		c.MainEntries = []string{"*"}
+	}
+
+	if c.TrackStrategy == "" {
+		c.TrackStrategy = "project"
+	}
+
+	if c.TrackStrategy != "project" && c.TrackStrategy != "package" {
+		return fmt.Errorf("invalid track strategy: %s", c.TrackStrategy)
+	}
+
+	if c.GoatPackageName == "" {
+		c.GoatPackageName = "goat"
+	}
+
+	if c.GoatPackageAlias == "" {
+		c.GoatPackageAlias = "goat"
+	}
+
+	if c.GoatPackagePath == "" {
+		c.GoatPackagePath = "goat"
+	}
+	return nil
+}
+
+func (c *Config) GetGranularity() Granularity {
+	granularity, err := ToGranularity(c.Granularity)
+	if err != nil {
+		return GranularityBlock
+	}
+	return granularity
+}
+
+func (c *Config) IsMainEntry(entry string) bool {
+	for _, mainEntry := range c.MainEntries {
+		if mainEntry == "*" || mainEntry == entry {
+			return true
+		}
+	}
+	return false
 }
 
 // LoadConfig loads configuration from file
@@ -86,48 +193,45 @@ func LoadConfig(filename string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
-	// Repo path check
-	if config.ProjectRoot == "" {
-		return nil, fmt.Errorf("project root is required")
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("failed to validate config: %w", err)
 	}
-	projectRoot, err := filepath.Abs(config.ProjectRoot)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute path: %w", err)
-	}
-	config.ProjectRoot = projectRoot
-
-	// Set default values
-	if config.StableBranch == "" {
-		return nil, fmt.Errorf("stable branch is required")
-	}
-	if config.PublishBranch == "" {
-		return nil, fmt.Errorf("publish branch is required")
-	}
-	// Granularity check
-	if config.Granularity != nil {
-		switch *config.Granularity {
-		case GranularityLineStr, GranularityBlockStr, GranularityFuncStr:
-		default:
-			return nil, fmt.Errorf("invalid granularity: %s", *config.Granularity)
-		}
-	}
-
-	// Diff precision check
-	if config.DiffPrecision != nil {
-		if *config.DiffPrecision < 1 || *config.DiffPrecision > 4 {
-			return nil, fmt.Errorf("invalid diff precision: %d", *config.DiffPrecision)
-		}
-	}
-
-	// Threads check
-	if config.Threads == 0 {
-		config.Threads = runtime.NumCPU()
-	}
-
 	return &config, nil
 }
 
-func Init(projectPath string) error {
-	cfg := fmt.Sprintf(CONFIG_TEMPLATE, projectPath)
-	return os.WriteFile(filepath.Join(projectPath, ".goat", "config.yaml"), []byte(cfg), 0644)
+// InitWithConfig initializes configuration with a Config struct
+func InitWithConfig(filename string, cfg *Config) error {
+	// parse config template
+	tmpl, err := template.New("config").Parse(CONFIG_TEMPLATE)
+	if err != nil {
+		return fmt.Errorf("failed to parse config template: %w", err)
+	}
+
+	// create config file
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create config file: %w", err)
+	}
+	defer file.Close()
+
+	// execute template
+	if err := tmpl.Execute(file, cfg); err != nil {
+		return fmt.Errorf("failed to execute config template: %w", err)
+	}
+
+	return nil
+}
+
+// GetGoModuleName gets the module name from the go.mod file
+func GoModuleName(root string) string {
+	modFilePath := filepath.Join(root, "go.mod")
+	content, err := os.ReadFile(modFilePath)
+	if err != nil {
+		return ""
+	}
+	modFile, err := modfile.Parse(modFilePath, content, nil)
+	if err != nil {
+		return ""
+	}
+	return modFile.Module.Mod.Path
 }

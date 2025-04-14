@@ -1,81 +1,43 @@
 package main
 
 import (
-	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
-	"sort"
+	"os"
 
-	"github.com/monshunter/goat/pkg/config"
-	"github.com/monshunter/goat/pkg/diff"
-	"github.com/monshunter/goat/pkg/maininfo"
-	"github.com/monshunter/goat/pkg/tracking"
-	"github.com/monshunter/goat/pkg/tracking/increament"
+	"github.com/spf13/cobra"
 )
 
+var configYaml string
+
+func init() {
+	configYaml = ".goat.yaml"
+	if os.Getenv("GOAT_CONFIG") != "" {
+		configYaml = os.Getenv("GOAT_CONFIG")
+	}
+}
 func main() {
-	projectPath := flag.String("p", "", "project path")
-	stableBranch := flag.String("s", "", "stable branch")
-	publishBranch := flag.String("b", "", "publish branch")
-	workers := flag.Int("w", 4, "number of workers")
-	flag.Parse()
-	if *projectPath == "" || *stableBranch == "" || *publishBranch == "" {
-		log.Fatalf("project path, stable branch and publish branch are required")
+	rootCmd := &cobra.Command{
+		Use:   "goat",
+		Short: "Goat is a tool for analyzing and instrumenting Go programs",
+		Long:  `Goat is a tool for analyzing and instrumenting Go programs`,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// check current directory is a golang project
+			if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
+				return fmt.Errorf("current directory is not a golang project")
+			}
+			// check current directory is a git repository
+			if _, err := os.Stat(".git"); os.IsNotExist(err) {
+				return fmt.Errorf("current directory is not a git repository")
+			}
+			return nil
+		},
 	}
-	var differ diff.DifferInterface
-	differ, err := diff.NewDifferV2(*projectPath, *stableBranch, *publishBranch, *workers)
-	if err != nil {
-		log.Fatalf("failed to create differ: %v", err)
+	rootCmd.AddCommand(initCmd())
+	rootCmd.AddCommand(patchCmd())
+	rootCmd.AddCommand(fixCmd())
+	rootCmd.AddCommand(cleanCmd())
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatalf("failed to execute root command: %v", err)
 	}
-	changes, err := differ.AnalyzeChanges()
-	if err != nil {
-		log.Fatalf("failed to analyze changes2: %v", err)
-	}
-
-	sort.Slice(changes, func(i, j int) bool {
-		return changes[i].Path < changes[j].Path
-	})
-	for _, change := range changes {
-		log.Printf("change: %v", change)
-	}
-
-	mainInfo, err := maininfo.NewMainInfo(*projectPath)
-	if err != nil {
-		log.Fatalf("failed to create main info: %v", err)
-	}
-	result, err := json.MarshalIndent(mainInfo, "", "  ")
-	if err != nil {
-		log.Fatalf("failed to marshal main info: %v", err)
-	}
-	_ = result
-	// log.Printf("main info: %s", string(result))
-	// return
-	change := changes[1]
-	var track tracking.Tracker
-	track, err = tracking.NewIncreamentTrack(*projectPath, change, nil, config.GranularityLine)
-	if err != nil {
-		log.Fatalf("failed to create track:%s %v", change.Path, err)
-	}
-	n, err := track.Track()
-	if err != nil {
-		log.Fatalf("failed to track:%s %v", change.Path, err)
-	}
-	start := 10
-	_, err = track.Replace(`"github.com/monshunter/goat"`, tracking.IncreamentReplaceImport("goat", "github.com/monshunter/goat"))
-	count, err := track.Replace(`goat.Track(TRACK_ID)`, tracking.IncreamentReplaceStmt("goat", start))
-	if err != nil {
-		log.Fatalf("failed to calibrate:%s %v", change.Path, err)
-	}
-	log.Printf("tracked %d lines, replaced %d times", n, count)
-	fmt.Printf("%s", track.Bytes())
-	values := increament.NewValues("goat", "1.0.0", "goat", false)
-	idx := make([]int, count)
-	for i := 0; i < count; i++ {
-		idx[i] = i + start
-	}
-	values.AddTrackIds(idx)
-	values.AddComponent(1, "LoginComponent", idx[:len(idx)/2])
-	values.AddComponent(2, "DashboardComponent", idx[len(idx)/2:])
-	values.Save("tmp/track.go")
 }

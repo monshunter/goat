@@ -1,40 +1,43 @@
 package main
 
 import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/monshunter/goat/pkg/config"
+	"github.com/monshunter/goat/pkg/goat"
 	"github.com/spf13/cobra"
 )
 
 func patchCmd() *cobra.Command {
-	var (
-		newBranch string
-		bin       string
-	)
 
 	cmd := &cobra.Command{
-		Use:   "patch <project>",
+		Use:   "patch",
 		Short: "Insert instrumentation code for the project",
 		Long: `The patch command is used to analyze incremental code of the project and insert instrumentation.
-
-Arguments:
-  <project> Project path
 
 Options:
    None
 
 Examples:
-  goat patch /path/to/project 
-  goat patch .`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			project := args[0]
-			_ = project
-			// TODO: Implement instrumentation logic
+	goat patch`,
+		Args: cobra.ExactArgs(0),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if _, err := os.Stat(configYaml); os.IsNotExist(err) {
+				return fmt.Errorf("config file %s not found", configYaml)
+			}
 			return nil
 		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.LoadConfig(configYaml)
+			if err != nil {
+				log.Printf("failed to load config: %v", err)
+				return err
+			}
+			executor := goat.NewPatchExecutor(cfg)
+			return executor.Run()
+		},
 	}
-
-	// Add command line flags
-	cmd.Flags().StringVar(&newBranch, "newBranch", "", "New branch name")
-	cmd.Flags().StringVar(&bin, "bin", "", "Target binary name")
 	return cmd
 }

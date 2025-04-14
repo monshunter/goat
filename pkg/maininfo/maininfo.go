@@ -9,57 +9,82 @@ import (
 	"path/filepath"
 	"strings"
 
-	"golang.org/x/mod/modfile"
+	"github.com/monshunter/goat/pkg/utils"
 )
 
-// MainPackageInfo 表示一个main包的信息
+// MainPackageInfo represents information about a main package
 type MainPackageInfo struct {
 	MainDir  string   `json:"mainDir"`
 	MainFile string   `json:"mainFile"`
 	Imports  []string `json:"imports"`
 }
 
-type MainInfo struct {
-	ProjectRoot      string
-	Module           string
-	MainPackageInfos []MainPackageInfo
+func (m *MainPackageInfo) ApplyMainEntry(packageAlias string, packagePath string, codes []string) ([]byte, error) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, m.MainFile, nil, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+	position := 0
+	for _, decl := range f.Decls {
+		if node, ok := decl.(*ast.FuncDecl); ok && node.Name.Name == "main" && node.Recv == nil {
+			position = fset.Position(node.Body.Lbrace + 2).Line
+		}
+	}
+	content, err := utils.AddCodes(fset, f, position, codes)
+	if err != nil {
+		return nil, err
+	}
+	fileInfo, err := os.Stat(m.MainFile)
+	if err != nil {
+		return nil, err
+	}
+
+	perm := fileInfo.Mode().Perm()
+	err = os.WriteFile(m.MainFile, content, perm)
+	if err != nil {
+		return nil, err
+	}
+	content, err = utils.AddImport(packagePath, packageAlias, m.MainFile, content)
+	if err != nil {
+		return nil, err
+	}
+	err = os.WriteFile(m.MainFile, content, perm)
+	if err != nil {
+		return nil, err
+	}
+	return content, nil
 }
 
-func NewMainInfo(projectRoot string) (*MainInfo, error) {
+// MainInfo represents information about a main package
+type MainInfo struct {
+	ProjectRoot      string            `json:"projectRoot"`
+	Module           string            `json:"module"`
+	MainPackageInfos []MainPackageInfo `json:"mainPackageInfos"`
+}
+
+// NewMainInfo creates a new MainInfo instance
+func NewMainInfo(projectRoot string, goModule string) (*MainInfo, error) {
 	mainInfo := &MainInfo{
 		ProjectRoot: projectRoot,
+		Module:      goModule,
 	}
-	modulePrefix := getModulePrefix(projectRoot)
-	if modulePrefix == "" {
-		return nil, fmt.Errorf("warning: no go.mod file found, cannot determine module prefix")
-	}
-	mainInfo.Module = modulePrefix
 	mainPackageInfos, err := mainInfo.analyzeMainPackages()
 	if err != nil {
 		return nil, err
+	}
+
+	if len(mainPackageInfos) == 0 {
+		return nil, fmt.Errorf("warning: no main packages found")
 	}
 
 	mainInfo.MainPackageInfos = mainPackageInfos
 	return mainInfo, nil
 }
 
-// getModulePrefix 从go.mod文件中获取模块前缀
-func getModulePrefix(root string) string {
-	modFilePath := filepath.Join(root, "go.mod")
-	content, err := os.ReadFile(modFilePath)
-	if err != nil {
-		return ""
-	}
-	modFile, err := modfile.Parse(modFilePath, content, nil)
-	if err != nil {
-		return ""
-	}
-	return modFile.Module.Mod.Path
-}
-
-// analyzeMainPackages 分析所有main包
+// analyzeMainPackages analyzes all main packages
 func (m *MainInfo) analyzeMainPackages() ([]MainPackageInfo, error) {
-	// 找到所有的Go文件
+	// find all Go files
 	var goFiles []string
 	err := filepath.Walk(m.ProjectRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -83,13 +108,13 @@ func (m *MainInfo) analyzeMainPackages() ([]MainPackageInfo, error) {
 		return nil, fmt.Errorf("error: failed to walk directory: %w", err)
 	}
 
-	// 找到所有main包
+	// find all main packages
 	mainPackages, err := findMainPackages(goFiles)
 	if err != nil {
 		return nil, fmt.Errorf("error: failed to find main packages: %w", err)
 	}
 
-	// 分析每个main包
+	// analyze each main package
 	results := make([]MainPackageInfo, 0, len(mainPackages))
 	for _, mainDir := range mainPackages {
 		info := m.analyzeMainImports(mainDir)
@@ -98,6 +123,7 @@ func (m *MainInfo) analyzeMainPackages() ([]MainPackageInfo, error) {
 	return results, nil
 }
 
+// getRelativeDir gets the relative directory
 func getRelativeDir(root, dir string) string {
 	relDir, err := filepath.Rel(root, dir)
 	if err != nil {
@@ -106,7 +132,7 @@ func getRelativeDir(root, dir string) string {
 	return relDir
 }
 
-// findMainPackages 找到所有的main包
+// findMainPackages finds all main packages
 func findMainPackages(goFiles []string) ([]string, error) {
 	visited := make(map[string]bool)
 	results := make([]string, 0, len(goFiles))
@@ -128,6 +154,7 @@ func findMainPackages(goFiles []string) ([]string, error) {
 	return results, nil
 }
 
+// findMainEntryFile finds the main entry file
 func findMainEntryFile(mainDir string) string {
 	entries, err := os.ReadDir(mainDir)
 	if err != nil {
@@ -154,28 +181,29 @@ func findMainEntryFile(mainDir string) string {
 	return ""
 }
 
-// analyzeMainPackage 分析单个main包
+// analyzeMainPackage analyzes a single main package
 func (m *MainInfo) analyzeMainImports(mainDir string) MainPackageInfo {
 	info := MainPackageInfo{
 		MainDir:  getRelativeDir(m.ProjectRoot, mainDir),
 		MainFile: getRelativeDir(m.ProjectRoot, findMainEntryFile(mainDir)),
 	}
-	// 分析导入的包
+	// analyze imported packages
 	importedPkgs := make(map[string]bool)
 	m.collectImports(mainDir, importedPkgs)
 
-	// 过滤出项目内部包
+	// filter out project internal packages
 	var internalPackages []string
 	for pkg := range importedPkgs {
 		internalPackages = append(internalPackages, getRelativeDir(m.Module, pkg))
 	}
+	internalPackages = append(internalPackages, info.MainDir)
 	info.Imports = internalPackages
 	return info
 }
 
-// collectImports 收集目录中所有Go文件的导入
+// collectImports collects all imports in the directory
 func (m *MainInfo) collectImports(dir string, importedPkgs map[string]bool) {
-	// 获取目录中的所有Go文件
+	// get all Go files in the directory
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -198,13 +226,13 @@ func (m *MainInfo) collectImports(dir string, importedPkgs map[string]bool) {
 			continue
 		}
 
-		// 添加导入的包
+		// add imported packages
 		for _, imp := range node.Imports {
 			importPath := strings.Trim(imp.Path.Value, "\"")
 			if importedPkgs[importPath] {
 				continue
 			}
-			// 递归处理内部包
+			// recursively process internal packages
 			if m.isInternalPackage(importPath) {
 				importedPkgs[importPath] = true
 				pkgDir := m.getPackageDir(importPath)
@@ -216,28 +244,28 @@ func (m *MainInfo) collectImports(dir string, importedPkgs map[string]bool) {
 	}
 }
 
-// isInternalPackage 判断是否为项目内部包
+// isInternalPackage checks if a package is a project internal package
 func (m *MainInfo) isInternalPackage(importPath string) bool {
-	// 如果有模块前缀，检查是否以模块前缀开头
+	// if there is a module prefix, check if it starts with the module prefix
 	if m.Module != "" && strings.HasPrefix(importPath, m.Module) {
 		return true
 	}
 
-	// 没有模块前缀，则检查包是否在项目目录下
+	// if there is no module prefix, check if the package is in the project directory
 	pkgDir := m.getPackageDir(importPath)
 	return pkgDir != "" && strings.HasPrefix(pkgDir, m.ProjectRoot)
 }
 
-// getPackageDir 获取包对应的目录
+// getPackageDir gets the directory of a package
 func (m *MainInfo) getPackageDir(importPath string) string {
 	if m.Module != "" && strings.HasPrefix(importPath, m.Module) {
-		// 去掉模块前缀，获取相对路径
+		// remove the module prefix, get the relative path
 		relPath := strings.TrimPrefix(importPath, m.Module)
 		relPath = strings.TrimPrefix(relPath, "/")
 		return filepath.Join(m.ProjectRoot, relPath)
 	}
 
-	// 尝试在GOPATH中查找包
+	// try to find the package in the GOPATH
 	gopath := os.Getenv("GOPATH")
 	if gopath != "" {
 		pkgDir := filepath.Join(gopath, "src", importPath)

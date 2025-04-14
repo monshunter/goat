@@ -2,6 +2,7 @@ package diff
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
@@ -160,4 +161,21 @@ func getLineChange(filePatch diff.FilePatch) []LineChange {
 		}
 	}
 	return lineChanges
+}
+
+func isGoFile(fileName string) bool {
+	if !strings.HasSuffix(fileName, ".go") || strings.HasSuffix(fileName, "_test.go") {
+		return false
+	}
+	dir := filepath.Dir(fileName)
+	if dir == "vendor" || dir == "testdata" || dir == "node_modules" {
+		return false
+	}
+	segments := strings.Split(dir, "/")
+	for _, segment := range segments {
+		if segment == "testdata" {
+			return false
+		}
+	}
+	return true
 }
