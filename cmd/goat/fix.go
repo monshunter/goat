@@ -31,7 +31,11 @@ Examples:
 				log.Printf("failed to load config: %v", err)
 				return err
 			}
-			return goat.RunFix(cfg)
+			executor := goat.NewFixExecutor(cfg)
+			if err := executor.Run(); err != nil {
+				return err
+			}
+			return nil
 		},
 	}
 

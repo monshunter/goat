@@ -8,30 +8,29 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"regexp"
 
 	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/diff"
+	"github.com/monshunter/goat/pkg/tracking/increament"
 	"github.com/monshunter/goat/pkg/utils"
 )
 
-const DefaultImportPath = `github.com/monshunter/goat/goat`
-const DefaultImportAlias = `goat`
-const DefaultTrackStmt = `goat.Track(TRACK_ID)`
-
 type IncreamentTrack struct {
-	basePath            string
-	fileChange          *diff.FileChange
-	provider            TrackTemplateProvider
-	count               int
-	content             []byte
-	fileName            string
-	positionInserts     InsertPositions
-	lastBlockInsertLine int
-	granularity         config.Granularity
+	basePath              string
+	fileChange            *diff.FileChange
+	provider              TrackTemplateProvider
+	count                 int
+	content               []byte
+	fileName              string
+	positionInserts       InsertPositions
+	lastBlockInsertLine   int
+	granularity           config.Granularity
+	importPathPlaceHolder string
+	trackStmtPlaceHolders []string
 }
 
 func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
+	importPathPlaceHolder string, trackStmtPlaceHolders []string,
 	provider TrackTemplateProvider, granularity config.Granularity) (*IncreamentTrack, error) {
 	fileName := fileChange.Path
 	if !filepath.IsAbs(fileName) {
@@ -42,18 +41,27 @@ func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
 		provider = defaultIncrementTemplateProvider()
 	}
 
+	if importPathPlaceHolder == "" {
+		importPathPlaceHolder = increament.TrackImportPathPlaceHolder
+	}
+	if len(trackStmtPlaceHolders) == 0 {
+		trackStmtPlaceHolders = increament.GetPackageInsertData()
+	}
+
 	content, err := os.ReadFile(fileName)
 	if err != nil {
 		return nil, err
 	}
 	return &IncreamentTrack{
-		basePath:        basePath,
-		fileChange:      fileChange,
-		provider:        provider,
-		fileName:        fileName,
-		content:         content,
-		positionInserts: InsertPositions{},
-		granularity:     granularity,
+		basePath:              basePath,
+		fileChange:            fileChange,
+		provider:              provider,
+		fileName:              fileName,
+		content:               content,
+		positionInserts:       InsertPositions{},
+		granularity:           granularity,
+		importPathPlaceHolder: importPathPlaceHolder,
+		trackStmtPlaceHolders: trackStmtPlaceHolders,
 	}, nil
 }
 
@@ -78,8 +86,18 @@ func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, er
 		if lines == positionInsert[posIdx].positions-1 {
 			pos := positionInsert[posIdx]
 			buf.WriteString(srcStr[j:i])
+			// write default track stmt place holders
+			for _, trackStmtPlaceHolder := range t.trackStmtPlaceHolders {
+				buf.WriteString(trackStmtPlaceHolder)
+				buf.WriteByte('\n')
+			}
+			// write user defined provider insert
 			if pos.position.IsFront() {
 				if len(frontStmts) > 0 {
+					buf.WriteString(config.TrackUserComment)
+					buf.WriteByte('\n')
+					buf.WriteString(config.TrackTipsComment)
+					buf.WriteByte('\n')
 					for _, content := range frontComments {
 						buf.WriteString(content)
 						buf.WriteByte('\n')
@@ -88,10 +106,16 @@ func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, er
 						buf.WriteString(content)
 						buf.WriteByte('\n')
 					}
+					buf.WriteString(config.TrackEndComment)
+					buf.WriteByte('\n')
 				}
 
 			} else {
 				if len(backStmts) > 0 {
+					buf.WriteString(config.TrackUserComment)
+					buf.WriteByte('\n')
+					buf.WriteString(config.TrackTipsComment)
+					buf.WriteByte('\n')
 					for _, content := range backComments {
 						buf.WriteString(content)
 						buf.WriteByte('\n')
@@ -100,6 +124,8 @@ func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, er
 						buf.WriteString(content)
 						buf.WriteByte('\n')
 					}
+					buf.WriteString(config.TrackEndComment)
+					buf.WriteByte('\n')
 				}
 			}
 			j = i
@@ -202,9 +228,18 @@ func (t *IncreamentTrack) Track() (int, error) {
 		return 0, err
 	}
 	if t.count > 0 {
+		// do default insert
+		t.positionInserts.Reset()
+		content, err := utils.AddImport(t.importPathPlaceHolder, "", t.fileName, t.content)
+		if err != nil {
+			return 0, err
+		}
+		t.content = content
+
+		// do provider insert
 		t.positionInserts.Reset()
 		pkgPath, alias := t.provider.ImportSpec()
-		content, err := utils.AddImport(pkgPath, alias, t.fileName, t.content)
+		content, err = utils.AddImport(pkgPath, alias, t.fileName, t.content)
 		if err != nil {
 			return 0, err
 		}
@@ -223,14 +258,10 @@ func (t *IncreamentTrack) Replace(target string, replace func(older string) (new
 	}
 
 	content := string(t.content)
-	// 使用正则表达式进行替换，确保每次替换都调用replace函数
-	re := regexp.MustCompile(regexp.QuoteMeta(target))
-	count := len(re.FindAllString(content, -1))
-	newContent := re.ReplaceAllStringFunc(content, func(match string) string {
-		return replace(match)
-	})
-
-	// 更新内容
+	count, newContent, err := utils.Replace(content, target, replace)
+	if err != nil {
+		return 0, err
+	}
 	t.content = []byte(newContent)
 	return count, nil
 }
@@ -254,30 +285,6 @@ func (t *IncreamentTrack) Save(path string) error {
 	}
 	return os.WriteFile(path, t.content, perm)
 }
-
-// func (t *IncreamentTrack) addImport() ([]byte, error) {
-// 	fset, f, err := utils.GetAstTree("", t.content)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	pkgPath, alias := t.provider.ImportSpec()
-// 	found := false
-// 	for _, ipt := range f.Imports {
-// 		if strings.Trim(ipt.Path.Value, "\"") == pkgPath {
-// 			found = true
-// 			break
-// 		}
-// 	}
-// 	if !found {
-// 		astutil.AddNamedImport(fset, f, alias, pkgPath)
-// 	}
-// 	content, err := utils.FormatAst(fset, f)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	t.content = content
-// 	return t.content, nil
-// }
 
 func (t *IncreamentTrack) addStmts() ([]byte, error) {
 	fset, f, err := utils.GetAstTree("", t.content)
@@ -315,14 +322,13 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 				}
 			}
 		case *ast.ForStmt:
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			// t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			t.processStatements(s.Body.List, fset)
 		case *ast.RangeStmt:
-
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			// t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			t.processStatements(s.Body.List, fset)
 		case *ast.SwitchStmt:
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			// t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			t.processStatements(s.Body.List, fset)
 		case *ast.CommClause:
 			t.processStatements(s.Body, fset)
@@ -337,20 +343,20 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 				s.Results[i] = t.analyzeAndModifyExpr([]ast.Expr{result}, fset)[0]
 			}
 		case *ast.DeferStmt:
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			// t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			if s.Call != nil && s.Call.Fun != nil {
 				s.Call.Fun = t.analyzeAndModifyExpr([]ast.Expr{s.Call.Fun}, fset)[0]
 			}
 		case *ast.SelectStmt:
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			// t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			t.processStatements(s.Body.List, fset)
 		case *ast.GoStmt:
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			// t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			if s.Call != nil && s.Call.Fun != nil {
 				s.Call.Fun = t.analyzeAndModifyExpr([]ast.Expr{s.Call.Fun}, fset)[0]
 			}
 		case *ast.TypeSwitchStmt:
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			// t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			t.processStatements(s.Body.List, fset)
 		case *ast.ExprStmt:
 			switch s.X.(type) {
@@ -393,12 +399,13 @@ type incrementTemplateProvider struct {
 func defaultIncrementTemplateProvider() *incrementTemplateProvider {
 	return &incrementTemplateProvider{
 		frontCodeProvider: &incrementCodeProvider{position: CodeInsertPositionFront},
+		backCodeProvider:  &incrementCodeProvider{position: CodeInsertPositionBack},
 	}
 }
 
 func (p *incrementTemplateProvider) ImportSpec() (pkgPath, alias string) {
 	// Example: Use "fmt" package for Println
-	return DefaultImportPath, ""
+	return "", ""
 }
 
 func (p *incrementTemplateProvider) FrontTrackCodeProvider() TrackCodeProvider {
@@ -423,30 +430,15 @@ func (p *incrementCodeProvider) Position() CodeInsertPosition {
 
 func (p *incrementCodeProvider) Comments() []string {
 	// Example: Return a specific comment or nil
-	return []string{"// +goat:track"}
+	return []string{}
 }
 
 func (p *incrementCodeProvider) Stmts() []string {
 	// Example: Return the string representation of the statement
 	// Ideally, this should format the Stmt() result, but for simplicity:
-	return []string{DefaultTrackStmt}
+	return []string{}
 }
 
 // Ensure the new types implement the interfaces (compile-time check)
 var _ TrackTemplateProvider = (*incrementTemplateProvider)(nil)
 var _ TrackCodeProvider = (*incrementCodeProvider)(nil)
-
-func IncreamentReplaceStmt(ident string, start int) func(older string) (newer string) {
-	return func(older string) (newer string) {
-		newer = fmt.Sprintf(`%s.Track(%s.TRACK_ID_%d)`, ident, ident, start)
-		start++
-		return
-	}
-}
-
-func IncreamentReplaceImport(alias string, importPath string) func(older string) (newer string) {
-	return func(older string) (newer string) {
-		newer = fmt.Sprintf(`%s "%s"`, alias, importPath)
-		return
-	}
-}

@@ -187,6 +187,10 @@ func (v *Values) Save(outputPath string) error {
 	return os.WriteFile(outputPath, data, 0644)
 }
 
+func (v *Values) Remove(outputPath string) error {
+	return os.Remove(outputPath)
+}
+
 // SaveWithCustomTemplate renders with a custom template and saves to a file
 func (v *Values) SaveWithCustomTemplate(outputPath, customTemplate string) error {
 	if err := v.Validate(); err != nil {

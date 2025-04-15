@@ -5,10 +5,51 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 
 	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v3"
+)
+
+const goatGeneratedFile = "goat_generated.go"
+
+const (
+	// Track generate comment, which is used to mark the generate of the track
+	TrackGenerateComment = "// +goat:generate"
+	// Track tips comment, which is used to mark the tips of the track
+	TrackTipsComment = "// +goat:tips: do not edit the block between the +goat comments"
+	// Track delete comment, which is used to mark the delete of the track
+	// goat fix will try to delete codes
+	TrackDeleteComment = "// +goat:delete"
+	// Track import comment, which is used to mark the import of the track
+	TrackImportComment = "// +goat:import"
+	// Track insert comment, which is used to mark to add by human
+	// goat fix will try to insert codes the goat fix will try to insert codes the goat fix will try to insert codes the
+	TrackInsertComment = "// +goat:insert"
+	// Track main entry comment, which is used to mark the main entry of the track
+	TrackMainEntryComment = "// +goat:main"
+	// Track end comment, which is used to mark the end of the track
+	TrackEndComment = "// +goat:end"
+	// Track user comment, which is used to mark the track is user defined
+	TrackUserComment = "// +goat:user"
+)
+
+var (
+	// Track insert regexp, which is used to match the insert comment
+	TrackInsertRegexp = regexp.MustCompile(regexp.QuoteMeta(TrackInsertComment))
+	// Track generate end regexp, which is used to match the generate end comment
+	TrackGenerateEndRegexp = regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(TrackGenerateComment) +
+		`[^\n]` + `*\n(?:.*\n)*?\s*` + regexp.QuoteMeta(TrackEndComment) + `[^\n]*\n`)
+	// Track delete end regexp, which is used to match the delete end comment
+	TrackDeleteEndRegexp = regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(TrackDeleteComment) +
+		`[^\n]` + `*\n(?:.*\n)*?\s*` + regexp.QuoteMeta(TrackEndComment) + `[^\n]*\n`)
+	// Track main entry end regexp, which is used to match the main entry end comment
+	TrackMainEntryEndRegexp = regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(TrackMainEntryComment) +
+		`[^\n]` + `*\n(?:.*\n)*?\s*` + regexp.QuoteMeta(TrackEndComment) + `[^\n]*\n`)
+	// Track user end regexp, which is used to match the user end comment
+	TrackUserEndRegexp = regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(TrackUserComment) +
+		`[^\n]` + `*\n(?:.*\n)*?\s*` + regexp.QuoteMeta(TrackEndComment) + `[^\n]*\n`)
 )
 
 type Granularity int
@@ -121,11 +162,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("project root is required")
 	}
 
-	projectRoot, err := filepath.Abs(c.ProjectRoot)
+	_, err = filepath.Abs(c.ProjectRoot)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
-	c.ProjectRoot = projectRoot
+	// c.ProjectRoot = projectRoot
 
 	if c.StableBranch == "" {
 		c.StableBranch = "main"
@@ -136,7 +177,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Ignores == nil {
-		c.Ignores = []string{".git", ".gitignore", ".DS_Store", ".idea", ".vscode", ".venv"}
+		c.Ignores = []string{".git", ".gitignore", ".DS_Store", ".idea", ".vscode", ".venv", "vendor", "testdata", "node_modules"}
 	}
 
 	if c.MainEntries == nil {
@@ -162,6 +203,8 @@ func (c *Config) Validate() error {
 	if c.GoatPackagePath == "" {
 		c.GoatPackagePath = "goat"
 	}
+	// ignore goat_generated.go
+	c.Ignores = append(c.Ignores, c.GoatGeneratedFile())
 	return nil
 }
 
@@ -180,6 +223,10 @@ func (c *Config) IsMainEntry(entry string) bool {
 		}
 	}
 	return false
+}
+
+func (c *Config) GoatGeneratedFile() string {
+	return filepath.Join(c.GoatPackagePath, goatGeneratedFile)
 }
 
 // LoadConfig loads configuration from file

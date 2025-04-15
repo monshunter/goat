@@ -29,6 +29,7 @@ func (m *MainPackageInfo) ApplyMainEntry(packageAlias string, packagePath string
 	for _, decl := range f.Decls {
 		if node, ok := decl.(*ast.FuncDecl); ok && node.Name.Name == "main" && node.Recv == nil {
 			position = fset.Position(node.Body.Lbrace + 2).Line
+			break
 		}
 	}
 	content, err := utils.AddCodes(fset, f, position, codes)

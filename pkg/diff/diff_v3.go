@@ -9,16 +9,15 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
+	"github.com/monshunter/goat/pkg/config"
+	"github.com/monshunter/goat/pkg/utils"
 )
 
 // Due to go-git, this version will panic in a multi-threaded scenario.
 // https://github.com/go-git/go-git/pull/186
 // DifferV3 Code DifferV3ence Analyzer
 type DifferV3 struct {
-	stableBranch  string
-	publishBranch string
-	repoPath      string
-	workers       int
+	cfg           *config.Config
 	repo          *git.Repository
 	stableHash    plumbing.Hash
 	publishHash   plumbing.Hash
@@ -27,24 +26,21 @@ type DifferV3 struct {
 }
 
 // NewDifferV3 creates a new code DifferV3
-func NewDifferV3(projectPath, stableBranch, publishBranch string, workers int) (*DifferV3, error) {
-	repo, err := git.PlainOpen(projectPath)
+func NewDifferV3(cfg *config.Config) (*DifferV3, error) {
+	repo, err := git.PlainOpen(cfg.ProjectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
 	d := &DifferV3{
-		repo:          repo,
-		stableBranch:  stableBranch,
-		publishBranch: publishBranch,
-		repoPath:      projectPath,
-		workers:       workers,
+		repo: repo,
+		cfg:  cfg,
 	}
-	stableHash, err := resolveRef(d.repo, stableBranch)
+	stableHash, err := resolveRef(d.repo, cfg.StableBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve stable branch: %w", err)
 	}
 
-	publishHash, err := resolveRef(d.repo, publishBranch)
+	publishHash, err := resolveRef(d.repo, cfg.PublishBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve publish branch: %w", err)
 	}
@@ -88,7 +84,7 @@ func (d *DifferV3) AnalyzeChanges() ([]*FileChange, error) {
 	// Process changes concurrently with worker pool
 	fileChanges := make([]*FileChange, len(changes))
 	errChan := make(chan error, len(changes))
-	sem := make(chan struct{}, d.workers) // concurrent workers,default 10
+	sem := make(chan struct{}, d.cfg.Threads) // concurrent workers,default 10
 	var wg sync.WaitGroup
 	wg.Add(len(changes))
 	for i, change := range changes {
@@ -137,7 +133,7 @@ func (d *DifferV3) analyzeChange(change *object.Change) (*FileChange, error) {
 // handleInsert handles insert or modify operations
 func (d *DifferV3) handleInsert(change *object.Change) (*FileChange, error) {
 	fileName := change.To.Name
-	if !isGoFile(fileName) {
+	if !utils.IsTargetFile(fileName, d.cfg.Ignores) {
 		return nil, nil
 	}
 	patch, err := change.Patch()
@@ -157,5 +153,5 @@ func (d *DifferV3) handleInsert(change *object.Change) (*FileChange, error) {
 
 // GetRepoPath returns the path of the repository
 func (d *DifferV3) GetRepoPath() string {
-	return d.repoPath
+	return d.cfg.ProjectRoot
 }

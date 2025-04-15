@@ -8,14 +8,13 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
+	"github.com/monshunter/goat/pkg/config"
+	"github.com/monshunter/goat/pkg/utils"
 )
 
 // Differ Code Difference Analyzer
 type Differ struct {
-	stableBranch  string
-	publishBranch string
-	repoPath      string
-	workers       int
+	cfg           *config.Config
 	repo          *git.Repository
 	stableHash    plumbing.Hash
 	publishHash   plumbing.Hash
@@ -25,25 +24,22 @@ type Differ struct {
 }
 
 // NewDiffer creates a new code differ
-func NewDiffer(projectPath, stableBranch, publishBranch string, workers int) (*Differ, error) {
-	repo, err := git.PlainOpen(projectPath)
+func NewDiffer(cfg *config.Config) (*Differ, error) {
+	repo, err := git.PlainOpen(cfg.ProjectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
 	d := &Differ{
-		repo:          repo,
-		stableBranch:  stableBranch,
-		publishBranch: publishBranch,
-		repoPath:      projectPath,
-		workers:       workers,
-		commits:       make(map[plumbing.Hash]*object.Commit),
+		repo:    repo,
+		cfg:     cfg,
+		commits: make(map[plumbing.Hash]*object.Commit),
 	}
-	stableHash, err := resolveRef(d.repo, stableBranch)
+	stableHash, err := resolveRef(d.repo, cfg.StableBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve stable branch: %w", err)
 	}
 
-	publishHash, err := resolveRef(d.repo, publishBranch)
+	publishHash, err := resolveRef(d.repo, cfg.PublishBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve publish branch: %w", err)
 	}
@@ -99,7 +95,7 @@ func (d *Differ) AnalyzeChanges() ([]*FileChange, error) {
 	// Process changes concurrently with worker pool
 	fileChanges := make([]*FileChange, len(changes))
 	errChan := make(chan error, len(changes))
-	sem := make(chan struct{}, d.workers) // concurrent workers,default 10
+	sem := make(chan struct{}, d.cfg.Threads) // concurrent workers,default 10
 	var wg sync.WaitGroup
 	wg.Add(len(changes))
 	for i, change := range changes {
@@ -154,7 +150,7 @@ func (d *Differ) analyzeChange(change *object.Change) (*FileChange, error) {
 // handleInsert handles insert or modify operations
 func (d *Differ) handleInsert(change *object.Change) (*FileChange, error) {
 	fileName := change.To.Name
-	if !isGoFile(fileName) {
+	if !utils.IsTargetFile(fileName, d.cfg.Ignores) {
 		return nil, nil
 	}
 	fc := FileChange{
@@ -238,5 +234,5 @@ func (d *Differ) isCommitAfterStable(commitHash plumbing.Hash, stableHash plumbi
 
 // GetRepoPath returns the path of the repository
 func (d *Differ) GetRepoPath() string {
-	return d.repoPath
+	return d.cfg.ProjectRoot
 }

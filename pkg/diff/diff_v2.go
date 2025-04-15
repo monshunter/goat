@@ -8,14 +8,13 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/format/diff"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/monshunter/goat/pkg/config"
+	"github.com/monshunter/goat/pkg/utils"
 )
 
 // DifferV2 Code DifferV2ence Analyzer
 type DifferV2 struct {
-	stableBranch  string
-	publishBranch string
-	repoPath      string
-	workers       int
+	cfg           *config.Config
 	repo          *git.Repository
 	stableHash    plumbing.Hash
 	publishHash   plumbing.Hash
@@ -24,24 +23,21 @@ type DifferV2 struct {
 }
 
 // NewDifferV2 creates a new code DifferV2
-func NewDifferV2(projectPath, stableBranch, publishBranch string, workers int) (*DifferV2, error) {
-	repo, err := git.PlainOpen(projectPath)
+func NewDifferV2(cfg *config.Config) (*DifferV2, error) {
+	repo, err := git.PlainOpen(cfg.ProjectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
 	d := &DifferV2{
-		repo:          repo,
-		stableBranch:  stableBranch,
-		publishBranch: publishBranch,
-		repoPath:      projectPath,
-		workers:       workers,
+		repo: repo,
+		cfg:  cfg,
 	}
-	stableHash, err := resolveRef(d.repo, stableBranch)
+	stableHash, err := resolveRef(d.repo, cfg.StableBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve stable branch: %w", err)
 	}
 
-	publishHash, err := resolveRef(d.repo, publishBranch)
+	publishHash, err := resolveRef(d.repo, cfg.PublishBranch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve publish branch: %w", err)
 	}
@@ -64,7 +60,7 @@ func NewDifferV2(projectPath, stableBranch, publishBranch string, workers int) (
 
 // GetRepoPath returns the path of the repository
 func (d *DifferV2) GetRepoPath() string {
-	return d.repoPath
+	return d.cfg.ProjectRoot
 }
 
 // AnalyzeChangesV2 Correctness evaluates the correctness of AnalyzeChangesV2 implementation
@@ -106,7 +102,7 @@ func (d *DifferV2) AnalyzeChanges() ([]*FileChange, error) {
 	// Process changes concurrently with worker pool
 	filePatches := patch.FilePatches()
 	fileChanges := make([]*FileChange, len(filePatches))
-	sem := make(chan struct{}, d.workers) // concurrent workers,default 10
+	sem := make(chan struct{}, d.cfg.Threads) // concurrent workers,default 10
 	var wg sync.WaitGroup
 	wg.Add(len(filePatches))
 	for i, filePatch := range filePatches {
@@ -131,7 +127,7 @@ func (d *DifferV2) analyzeChange(filePatch diff.FilePatch) *FileChange {
 	if (from == nil && to == nil) || (from != nil && to == nil) {
 		return nil
 	}
-	if !isGoFile(to.Path()) {
+	if !utils.IsTargetFile(to.Path(), d.cfg.Ignores) {
 		return nil
 	}
 	lineChanges := getLineChange(filePatch)
