@@ -4,9 +4,13 @@ stableBranch="7b033c21e"
 publishBranch="c9d69d0f"
 # publishBranch=""
 
-# project="/Users/tanzhangyu/Documents/work-proj/proj/registrycontroller"
-# stableBranch="c5f48fd"
-# publishBranch="0709dcc"
+project="/Users/tanzhangyu/Documents/work-proj/proj/registrycontroller"
+stableBranch="c5f48fd"
+publishBranch="0709dcc"
+
+# project="/Users/tanzhangyu/Documents/my-opensources/ast-practice"
+# stableBranch="4ee3b9c"
+# publishBranch="HEAD"
 
 # project="/Users/tanzhangyu/Documents/opensources/kubernetes"
 # stableBranch="release-1.31"
@@ -15,3 +19,6 @@ publishBranch="c9d69d0f"
 go build -o bin/goat ./cmd/goat
 # time bin/goat init $project --stable $stableBranch --publish $publishBranch --diff-precision 2
 time bin/goat init $project --stable $stableBranch --diff-precision 2
+# 6740fc8 1ce6426f8eb69b2250275138c6949d6b2
+# ee993bb 44c8511322868345e28b97713faebd891
+# git diff 6740fc8 ee993bb

@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/diff"
@@ -27,6 +28,8 @@ type IncreamentTrack struct {
 	granularity           config.Granularity
 	importPathPlaceHolder string
 	trackStmtPlaceHolders []string
+	source                []string
+	blockScopes           BlockScopes
 }
 
 func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
@@ -52,6 +55,11 @@ func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
 	if err != nil {
 		return nil, err
 	}
+
+	blockScopes, err := BlockScopesOfGoAST(fileName, content)
+	if err != nil {
+		return nil, err
+	}
 	return &IncreamentTrack{
 		basePath:              basePath,
 		fileChange:            fileChange,
@@ -62,6 +70,8 @@ func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
 		granularity:           granularity,
 		importPathPlaceHolder: importPathPlaceHolder,
 		trackStmtPlaceHolders: trackStmtPlaceHolders,
+		source:                strings.Split(string(content), "\n"),
+		blockScopes:           blockScopes,
 	}, nil
 }
 
@@ -76,7 +86,7 @@ func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, er
 	positionInsert := t.positionInserts
 	positionInsert.Sort()
 
-	// 对于每个插入位置，将打印语句插入到源代码字符串中
+	// For each insertion position, insert the print statement into the source code string
 	var buf bytes.Buffer
 	buf.Grow(len(srcStr) + insertLen)
 	posIdx := 0
@@ -208,8 +218,32 @@ func (t *IncreamentTrack) checkAndInsertByLine(position CodeInsertPosition, line
 func (t *IncreamentTrack) checkAndInsertStmtByBlock(position CodeInsertPosition, line int) {
 	lineChange := t.fileChange.LineChanges.Search(line)
 	if lineChange != -1 {
-		if t.lastBlockInsertLine != line-1 {
+		// check if the content between the last inserted line and the current line are all comments or empty lines
+		next := t.lastBlockInsertLine + 1
+		var content string
+		for next < line {
+			content = strings.TrimSpace(t.source[next-1])
+			if content == "" {
+				next++
+				continue
+			}
+
+			if utils.IsGoComment(content) {
+				next++
+				continue
+			}
+
+			break
+		}
+
+		if next != line {
 			t.addInsert(position, CodeInsertTypeStmt, line)
+		} else {
+			lastInsertBlockScope := t.blockScopes.Search(t.lastBlockInsertLine)
+			currentBlockScope := t.blockScopes.Search(line)
+			if lastInsertBlockScope != currentBlockScope {
+				t.addInsert(position, CodeInsertTypeStmt, line)
+			}
 		}
 		t.lastBlockInsertLine = line
 	}
@@ -308,7 +342,7 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 		switch s := stmt.(type) {
 		case *ast.AssignStmt:
 			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
-			s.Rhs = t.analyzeAndModifyExpr(s.Rhs, fset)
+			t.analyzeAndModifyExpr(s.Rhs, fset)
 		case *ast.IfStmt:
 			t.processStatements(s.Body.List, fset)
 			if s.Else != nil {
@@ -316,9 +350,7 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 				case *ast.IfStmt:
 					t.processStatements([]ast.Stmt{s.Else.(*ast.IfStmt)}, fset)
 				case *ast.BlockStmt:
-					block := s.Else.(*ast.BlockStmt)
-					t.processStatements(block.List, fset)
-					s.Else = block
+					t.processStatements(s.Else.(*ast.BlockStmt).List, fset)
 				}
 			}
 		case *ast.ForStmt:
@@ -339,21 +371,19 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 			t.processStatements(s.List, fset)
 		case *ast.ReturnStmt:
 			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
-			for i, result := range s.Results {
-				s.Results[i] = t.analyzeAndModifyExpr([]ast.Expr{result}, fset)[0]
-			}
+			t.analyzeAndModifyExpr(s.Results, fset)
 		case *ast.DeferStmt:
 			// t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			if s.Call != nil && s.Call.Fun != nil {
-				s.Call.Fun = t.analyzeAndModifyExpr([]ast.Expr{s.Call.Fun}, fset)[0]
+				t.analyzeAndModifyExpr([]ast.Expr{s.Call.Fun}, fset)
 			}
 		case *ast.SelectStmt:
 			// t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			t.processStatements(s.Body.List, fset)
 		case *ast.GoStmt:
-			// t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			if s.Call != nil && s.Call.Fun != nil {
-				s.Call.Fun = t.analyzeAndModifyExpr([]ast.Expr{s.Call.Fun}, fset)[0]
+				t.analyzeAndModifyExpr([]ast.Expr{s.Call.Fun}, fset)
 			}
 		case *ast.TypeSwitchStmt:
 			// t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
@@ -364,7 +394,10 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 				t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 				expr := s.X.(*ast.CallExpr)
 				if expr.Fun != nil {
-					expr.Fun = t.analyzeAndModifyExpr([]ast.Expr{expr.Fun}, fset)[0]
+					t.analyzeAndModifyExpr([]ast.Expr{expr.Fun}, fset)
+				}
+				if expr.Args != nil {
+					t.analyzeAndModifyExpr(expr.Args, fset)
 				}
 			default:
 			}
@@ -376,16 +409,20 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 
 // analyzeAndModifyExpr analyzes and modifies expressions by processing any function literals found.
 // It works in conjunction with processStatements to recursively handle nested expressions.
-func (t *IncreamentTrack) analyzeAndModifyExpr(exprList []ast.Expr, fset *token.FileSet) []ast.Expr {
-	newExprList := make([]ast.Expr, 0, len(exprList))
+func (t *IncreamentTrack) analyzeAndModifyExpr(exprList []ast.Expr, fset *token.FileSet) {
 	for _, expr := range exprList {
 		switch expr := expr.(type) {
 		case *ast.FuncLit:
 			t.processStatements(expr.Body.List, fset)
+		case *ast.CallExpr:
+			if expr.Fun != nil {
+				t.analyzeAndModifyExpr([]ast.Expr{expr.Fun}, fset)
+			}
+			if expr.Args != nil {
+				t.analyzeAndModifyExpr(expr.Args, fset)
+			}
 		}
-		newExprList = append(newExprList, expr)
 	}
-	return newExprList
 }
 
 // --- Interface Implementations ---

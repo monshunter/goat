@@ -68,7 +68,7 @@ type Component = int
 
 // Component IDs
 const (
-	_           = iota{{range .Components}}
+	_           = iota - 1 {{range .Components}}
 	COMPONENT_{{ .ID }} // {{ .ID }}{{end}}
 	// ...
 )

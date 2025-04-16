@@ -217,3 +217,40 @@ func IsDirEmpty(dirPath string) (bool, error) {
 
 	return true, nil // directory is empty
 }
+
+// IsGoComment checks if the code is a golang comment
+func IsGoComment(code string) bool {
+	// Must regnize the following patterns:
+	// 1. Single-line comment: // comment, note that "//" may have leading spaces
+	// 2. Multi-line comment: /* comment */，note that "*" may have leading spaces
+	// 3. Empty line is also considered as a comment
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return true
+	}
+	if strings.HasPrefix(code, "//") {
+		return true
+	}
+	if strings.HasPrefix(code, "/*") || strings.HasPrefix(code, "*/") {
+		return true
+	}
+	return false
+}
+
+func ParseComments(content []byte) (map[int]string, error) {
+	fset, f, err := GetAstTree("", content)
+	if err != nil {
+		return nil, err
+	}
+	comments := make(map[int]string)
+	for _, commentGroup := range f.Comments {
+		for _, comment := range commentGroup.List {
+			start := fset.Position(comment.Pos()).Line
+			text := strings.Split(comment.Text, "\n")
+			for i, line := range text {
+				comments[start+i] = line
+			}
+		}
+	}
+	return comments, nil
+}
