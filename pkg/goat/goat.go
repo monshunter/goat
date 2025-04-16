@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"sort"
 
@@ -67,6 +68,11 @@ type componentTrackIdx struct {
 	componentId int
 	component   string
 	trackIdx    []int
+}
+
+type goatFile struct {
+	filename string
+	content  string
 }
 
 func debugComponentTrackIdxs(componentTrackIdxs []componentTrackIdx) {
@@ -248,4 +254,31 @@ func resetGoatMain(fileContents string, goatImportPath string, goatPackageAlias 
 		}
 	}
 	return count, content, nil
+}
+
+func prepareFiles(cfg *config.Config) (files []string, err error) {
+	files = make([]string, 0)
+	err = filepath.Walk(cfg.ProjectRoot, func(path string, info os.FileInfo, err error) error {
+
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if !utils.IsTargetDir(path, cfg.Ignores) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !utils.IsGoFile(path) {
+			return nil
+		}
+		// skip goat_generated.go
+		if path == cfg.GoatGeneratedFile() {
+			return nil
+		}
+		// get relative path
+		files = append(files, utils.Rel(cfg.ProjectRoot, path))
+		return nil
+	})
+	return files, err
 }

@@ -31,7 +31,8 @@ Examples:
 				log.Printf("failed to load config: %v", err)
 				return err
 			}
-			return goat.RunClean(cfg)
+			cleanExecutor := goat.NewCleanExecutor(cfg)
+			return cleanExecutor.Run()
 		},
 	}
 

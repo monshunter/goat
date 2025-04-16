@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"slices"
 
 	"github.com/monshunter/goat/pkg/config"
@@ -34,7 +33,7 @@ func NewFixExecutor(cfg *config.Config) *FixExecutor {
 		filesContents:       make(map[string]string),
 	}
 	fixExecutor.goatImportPath = utils.GoatPackageImportPath(fixExecutor.goModule, fixExecutor.cfg.GoatPackagePath)
-	fixExecutor.goatPackageAlias = fixExecutor.cfg.GoatPackageAlias
+	fixExecutor.goatPackageAlias = cfg.GoatPackageAlias
 	return fixExecutor
 }
 
@@ -65,35 +64,8 @@ func (f *FixExecutor) initMainPackageInfos() error {
 	return nil
 }
 
-func (f *FixExecutor) prepareFiles() (files []string, err error) {
-	files = make([]string, 0)
-	err = filepath.Walk(f.cfg.ProjectRoot, func(path string, info os.FileInfo, err error) error {
-
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			if !utils.IsTargetDir(path, f.cfg.Ignores) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !utils.IsGoFile(path) {
-			return nil
-		}
-		// skip goat_generated.go
-		if path == f.cfg.GoatGeneratedFile() {
-			return nil
-		}
-		// get relative path
-		files = append(files, utils.Rel(f.cfg.ProjectRoot, path))
-		return nil
-	})
-	return files, err
-}
-
 func (f *FixExecutor) prepare() error {
-	files, err := f.prepareFiles()
+	files, err := prepareFiles(f.cfg)
 
 	if err != nil {
 		return err

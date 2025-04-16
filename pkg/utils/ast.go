@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -199,4 +200,20 @@ func Rel(base string, target string) string {
 		return target
 	}
 	return rel
+}
+
+// IsDirEmpty checks if a directory is empty
+func IsDirEmpty(dirPath string) (bool, error) {
+	f, err := os.Open(dirPath)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+
+	_, err = f.Readdirnames(1) // read one entry
+	if err == nil {
+		return false, nil // directory is not empty
+	}
+
+	return true, nil // directory is empty
 }
