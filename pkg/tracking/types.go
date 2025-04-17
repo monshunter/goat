@@ -103,6 +103,19 @@ func (p *InsertPositions) Sort() {
 		return a.positions - b.positions
 	})
 }
+
+func (p *InsertPositions) Unique() {
+	unique := make(map[InsertPosition]struct{})
+	for _, position := range *p {
+		unique[position] = struct{}{}
+	}
+	tmp := InsertPositions{}
+	for position := range unique {
+		tmp = append(tmp, position)
+	}
+	*p = tmp
+}
+
 func (p *InsertPositions) Reset() {
 	*p = InsertPositions{}
 }

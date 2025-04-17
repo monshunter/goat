@@ -29,7 +29,7 @@ func NewFixExecutor(cfg *config.Config) *FixExecutor {
 	fixExecutor := &FixExecutor{
 		cfg:                 cfg,
 		fileTrackIdStartMap: make(map[string]trackIdxInterval),
-		goModule:            config.GoModuleName(cfg.ProjectRoot),
+		goModule:            config.GoModuleName(),
 		filesContents:       make(map[string]string),
 	}
 	fixExecutor.goatImportPath = utils.GoatPackageImportPath(fixExecutor.goModule, fixExecutor.cfg.GoatPackagePath)
@@ -56,7 +56,7 @@ func (f *FixExecutor) Run() error {
 }
 
 func (f *FixExecutor) initMainPackageInfos() error {
-	mainPkgInfos, err := getMainPackageInfos(f.cfg.ProjectRoot, f.goModule)
+	mainPkgInfos, err := getMainPackageInfos(".", f.goModule)
 	if err != nil {
 		return err
 	}

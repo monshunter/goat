@@ -110,8 +110,6 @@ type Config struct {
 	AppName string `yaml:"appName"` // goat
 	// App version
 	AppVersion string `yaml:"appVersion"` // 1.0.0
-	// Root path
-	ProjectRoot string `yaml:"projectRoot"` // absolute path
 	// Stable branch name
 	StableBranch string `yaml:"stableBranch"` // commit hash or branch name or tag name or .
 	// Publish branch name
@@ -157,16 +155,6 @@ func (c *Config) Validate() error {
 	if c.Threads <= 0 {
 		c.Threads = runtime.NumCPU()
 	}
-
-	if c.ProjectRoot == "" {
-		return fmt.Errorf("project root is required")
-	}
-
-	_, err = filepath.Abs(c.ProjectRoot)
-	if err != nil {
-		return fmt.Errorf("failed to get absolute path: %w", err)
-	}
-	// c.ProjectRoot = projectRoot
 
 	if c.StableBranch == "" {
 		c.StableBranch = "main"
@@ -270,8 +258,8 @@ func InitWithConfig(filename string, cfg *Config) error {
 }
 
 // GetGoModuleName gets the module name from the go.mod file
-func GoModuleName(root string) string {
-	modFilePath := filepath.Join(root, "go.mod")
+func GoModuleName() string {
+	modFilePath := "go.mod"
 	content, err := os.ReadFile(modFilePath)
 	if err != nil {
 		return ""

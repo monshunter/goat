@@ -27,7 +27,7 @@ type DifferV3 struct {
 
 // NewDifferV3 creates a new code DifferV3
 func NewDifferV3(cfg *config.Config) (*DifferV3, error) {
-	repo, err := git.PlainOpen(cfg.ProjectRoot)
+	repo, err := git.PlainOpen(".")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
@@ -149,9 +149,4 @@ func (d *DifferV3) handleInsert(change *object.Change) (*FileChange, error) {
 	}
 	fc.LineChanges = lineChanges
 	return &fc, nil
-}
-
-// GetRepoPath returns the path of the repository
-func (d *DifferV3) GetRepoPath() string {
-	return d.cfg.ProjectRoot
 }

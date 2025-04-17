@@ -25,7 +25,7 @@ type Differ struct {
 
 // NewDiffer creates a new code differ
 func NewDiffer(cfg *config.Config) (*Differ, error) {
-	repo, err := git.PlainOpen(cfg.ProjectRoot)
+	repo, err := git.PlainOpen(".")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
@@ -230,9 +230,4 @@ func (d *Differ) isCommitAfterStable(commitHash plumbing.Hash, stableHash plumbi
 		return false
 	}
 	return d.stableCommit.Committer.When.Before(commit.Committer.When)
-}
-
-// GetRepoPath returns the path of the repository
-func (d *Differ) GetRepoPath() string {
-	return d.cfg.ProjectRoot
 }

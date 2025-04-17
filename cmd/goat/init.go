@@ -92,7 +92,6 @@ Examples:
 			cfg := &config.Config{
 				AppName:          appName,
 				AppVersion:       appVersion,
-				ProjectRoot:      project,
 				StableBranch:     stableBranch,
 				PublishBranch:    publishBranch,
 				GoatPackageName:  goatPackageName,

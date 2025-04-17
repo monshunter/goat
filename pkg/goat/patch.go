@@ -28,7 +28,7 @@ func NewPatchExecutor(cfg *config.Config) *PatchExecutor {
 	return &PatchExecutor{
 		cfg:                 cfg,
 		fileTrackIdStartMap: make(map[string]trackIdxInterval),
-		goModule:            config.GoModuleName(cfg.ProjectRoot),
+		goModule:            config.GoModuleName(),
 	}
 }
 
@@ -94,7 +94,7 @@ func (p *PatchExecutor) initChanges() error {
 
 // initMainPackageInfos initializes the main package infos
 func (p *PatchExecutor) initMainPackageInfos() error {
-	mainPkgInfos, err := getMainPackageInfos(p.cfg.ProjectRoot, p.goModule)
+	mainPkgInfos, err := getMainPackageInfos(".", p.goModule)
 	if err != nil {
 		return err
 	}
@@ -120,7 +120,7 @@ func (p *PatchExecutor) initTracks() error {
 
 func (p *PatchExecutor) handleDiffChange(change *diff.FileChange) (tracking.Tracker, error) {
 	granularity := p.cfg.GetGranularity()
-	tracker, err := tracking.NewIncreamentTrack(p.cfg.ProjectRoot, change,
+	tracker, err := tracking.NewIncreamentTrack(".", change,
 		increament.TrackImportPathPlaceHolder, increament.GetPackageInsertData(), nil, granularity)
 	if err != nil {
 		log.Printf("failed to get tracker: %v", err)

@@ -24,7 +24,7 @@ type DifferV2 struct {
 
 // NewDifferV2 creates a new code DifferV2
 func NewDifferV2(cfg *config.Config) (*DifferV2, error) {
-	repo, err := git.PlainOpen(cfg.ProjectRoot)
+	repo, err := git.PlainOpen(".")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
@@ -56,11 +56,6 @@ func NewDifferV2(cfg *config.Config) (*DifferV2, error) {
 	d.stableCommit = stableCommit
 	d.publishCommit = publishCommit
 	return d, nil
-}
-
-// GetRepoPath returns the path of the repository
-func (d *DifferV2) GetRepoPath() string {
-	return d.cfg.ProjectRoot
 }
 
 // AnalyzeChangesV2 Correctness evaluates the correctness of AnalyzeChangesV2 implementation

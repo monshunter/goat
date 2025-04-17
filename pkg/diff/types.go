@@ -11,7 +11,6 @@ import (
 
 type DifferInterface interface {
 	AnalyzeChanges() ([]*FileChange, error)
-	GetRepoPath() string
 }
 
 // FileChange represents file change information

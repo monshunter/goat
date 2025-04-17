@@ -17,19 +17,20 @@ import (
 )
 
 type IncreamentTrack struct {
-	basePath              string
-	fileChange            *diff.FileChange
-	provider              TrackTemplateProvider
-	count                 int
-	content               []byte
-	fileName              string
-	positionInserts       InsertPositions
-	lastBlockInsertLine   int
-	granularity           config.Granularity
-	importPathPlaceHolder string
-	trackStmtPlaceHolders []string
-	source                []string
-	blockScopes           BlockScopes
+	basePath               string
+	fileChange             *diff.FileChange
+	provider               TrackTemplateProvider
+	count                  int
+	content                []byte
+	fileName               string
+	positionInserts        InsertPositions
+	visitedPositionInserts map[InsertPosition]struct{}
+	lastBlockInsertLine    int
+	granularity            config.Granularity
+	importPathPlaceHolder  string
+	trackStmtPlaceHolders  []string
+	source                 []string
+	blockScopes            BlockScopes
 }
 
 func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
@@ -61,17 +62,18 @@ func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
 		return nil, err
 	}
 	return &IncreamentTrack{
-		basePath:              basePath,
-		fileChange:            fileChange,
-		provider:              provider,
-		fileName:              fileName,
-		content:               content,
-		positionInserts:       InsertPositions{},
-		granularity:           granularity,
-		importPathPlaceHolder: importPathPlaceHolder,
-		trackStmtPlaceHolders: trackStmtPlaceHolders,
-		source:                strings.Split(string(content), "\n"),
-		blockScopes:           blockScopes,
+		basePath:               basePath,
+		fileChange:             fileChange,
+		provider:               provider,
+		fileName:               fileName,
+		content:                content,
+		positionInserts:        InsertPositions{},
+		granularity:            granularity,
+		importPathPlaceHolder:  importPathPlaceHolder,
+		trackStmtPlaceHolders:  trackStmtPlaceHolders,
+		source:                 strings.Split(string(content), "\n"),
+		blockScopes:            blockScopes,
+		visitedPositionInserts: make(map[InsertPosition]struct{}),
 	}, nil
 }
 
@@ -84,8 +86,8 @@ func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, er
 
 	srcStr := src.String()
 	positionInsert := t.positionInserts
+	// positionInsert.Unique()
 	positionInsert.Sort()
-
 	// For each insertion position, insert the print statement into the source code string
 	var buf bytes.Buffer
 	buf.Grow(len(srcStr) + insertLen)
@@ -202,22 +204,19 @@ func (t *IncreamentTrack) checkAndInsert(position CodeInsertPosition, line int) 
 }
 
 func (t *IncreamentTrack) checkAndInsertStmtByFunc(position CodeInsertPosition, line int) {
-	lineChange := t.fileChange.LineChanges.Search(line)
-	if lineChange != -1 {
+	if t.isLineChanged(line) {
 		t.addInsert(position, CodeInsertTypeStmt, line)
 	}
 }
 
 func (t *IncreamentTrack) checkAndInsertByLine(position CodeInsertPosition, line int) {
-	lineChange := t.fileChange.LineChanges.Search(line)
-	if lineChange != -1 {
+	if t.isLineChanged(line) {
 		t.addInsert(position, CodeInsertTypeStmt, line)
 	}
 }
 
 func (t *IncreamentTrack) checkAndInsertStmtByBlock(position CodeInsertPosition, line int) {
-	lineChange := t.fileChange.LineChanges.Search(line)
-	if lineChange != -1 {
+	if t.isLineChanged(line) {
 		// check if the content between the last inserted line and the current line are all comments or empty lines
 		next := t.lastBlockInsertLine + 1
 		var content string
@@ -249,8 +248,31 @@ func (t *IncreamentTrack) checkAndInsertStmtByBlock(position CodeInsertPosition,
 	}
 }
 
+func (t *IncreamentTrack) isLineChanged(line int) bool {
+	lineChange := t.fileChange.LineChanges.Search(line)
+	return lineChange != -1
+}
+
+func (t *IncreamentTrack) isLineChangedRange(start, end int) bool {
+	for i := start; i <= end; i++ {
+		if t.isLineChanged(i) {
+			return true
+		}
+	}
+	return false
+}
+
 func (t *IncreamentTrack) addInsert(position CodeInsertPosition, codeType CodeInsertType, line int) {
+	// Add a check to avoid duplicate inserts
+	// Use visitedPositionInserts map to record the inserted positions,
+	// This can prevent duplicate inserts in multiple AST scans.
+	// It is important for ensuring the correctness and avoiding unnecessary duplicate tracking.
+	key := InsertPosition{position: position, codeType: codeType, positions: line}
+	if _, ok := t.visitedPositionInserts[key]; ok {
+		return
+	}
 	t.positionInserts.Insert(position, codeType, line)
+	t.visitedPositionInserts[key] = struct{}{}
 	t.count++
 }
 
@@ -328,9 +350,159 @@ func (t *IncreamentTrack) addStmts() ([]byte, error) {
 	for _, decl := range f.Decls {
 		if decl, ok := decl.(*ast.FuncDecl); ok {
 			t.processStatements(decl.Body.List, fset)
+			t.processSpecialStatements(decl.Body, fset)
 		}
 	}
 	return t.doInsert(fset, f)
+}
+
+func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.FileSet) {
+	ast.Inspect(node, func(n ast.Node) bool {
+		var changed bool
+		switch n := n.(type) {
+		case *ast.IfStmt:
+			// Judge if the if statement is changed:
+			// 1. If the if statement is changed, it means the whole if statement may be modified
+			// 2. Even if the Init part is not changed, the change of the if statement may affect the whole statement structure
+			// 3. In this case, we need to add tracking statements to the if statement
+			changed = t.isLineChanged(fset.Position(n.If).Line)
+			if !changed && n.Init != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Init.Pos()).Line,
+					fset.Position(n.Init.End()).Line)
+			}
+			if !changed && n.Cond != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Cond.Pos()).Line,
+					fset.Position(n.Cond.End()).Line)
+			}
+
+			if changed {
+				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Body.Lbrace).Line+1)
+				if n.Else != nil {
+					elseStmt, ok := n.Else.(*ast.BlockStmt)
+					if ok {
+						t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt,
+							fset.Position(elseStmt.Lbrace).Line+1)
+					}
+				}
+			}
+
+		case *ast.SwitchStmt:
+
+			// Judge if the switch keyword line is changed:
+			// 1. If the switch keyword line is changed, it means the whole switch statement may be modified
+			// 2. Even if the Init and Tag parts are not changed, the change of the switch keyword line may affect the whole statement structure
+			// 3. In this case, we need to add tracking statements to each case clause
+			changed = t.isLineChanged(fset.Position(n.Switch).Line)
+			if !changed && n.Init != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Init.Pos()).Line,
+					fset.Position(n.Init.End()).Line)
+			}
+			if !changed && n.Tag != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Tag.Pos()).Line,
+					fset.Position(n.Tag.End()).Line)
+			}
+			if changed {
+				for _, subStmt := range n.Body.List {
+					if caseClause, ok := subStmt.(*ast.CaseClause); ok && len(caseClause.Body) > 0 {
+						t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt,
+							fset.Position(caseClause.Colon).Line+1)
+					}
+				}
+			}
+		case *ast.TypeSwitchStmt:
+			changed = t.isLineChanged(fset.Position(n.Switch).Line)
+			if !changed && n.Init != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Init.Pos()).Line,
+					fset.Position(n.Init.End()).Line)
+			}
+			if !changed && n.Assign != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Assign.Pos()).Line,
+					fset.Position(n.Assign.End()).Line)
+			}
+
+			// Judge if the type switch statement is changed:
+			// 1. If the type switch statement is changed, it means the whole type switch statement may be modified
+			// 2. Even if the Init and Assign parts are not changed, the change of the type switch statement may affect the whole statement structure
+			// 3. In this case, we need to add tracking statements to each case clause
+			if changed {
+				for _, subStmt := range n.Body.List {
+					if caseClause, ok := subStmt.(*ast.CaseClause); ok && len(caseClause.Body) > 0 {
+						t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt,
+							fset.Position(caseClause.Colon).Line+1)
+					}
+				}
+			}
+		case *ast.CaseClause:
+			changed = t.isLineChanged(fset.Position(n.Case).Line)
+			if !changed && len(n.List) > 0 {
+				for _, expr := range n.List {
+					changed = t.isLineChangedRange(fset.Position(expr.Pos()).Line,
+						fset.Position(expr.End()).Line)
+					if changed {
+						break
+					}
+				}
+			}
+			if changed {
+				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Colon).Line+1)
+			}
+
+		case *ast.CommClause:
+			changed = t.isLineChanged(fset.Position(n.Case).Line)
+			if !changed && n.Comm != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Comm.Pos()).Line,
+					fset.Position(n.Comm.End()).Line)
+			}
+			if changed {
+				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Colon).Line+1)
+			}
+		case *ast.RangeStmt:
+			// Judge if the range statement is changed:
+			// 1. If the range statement is changed, it means the whole range statement may be modified
+			// 2. Even if the Key and Value parts are not changed, the change of the range statement may affect the whole statement structure
+			// 3. In this case, we need to add tracking statements to the range statement
+			changed = t.isLineChanged(fset.Position(n.For).Line)
+			if !changed && n.Key != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Key.Pos()).Line,
+					fset.Position(n.Key.End()).Line)
+			}
+			if !changed && n.Value != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Value.Pos()).Line,
+					fset.Position(n.Value.End()).Line)
+			}
+			if !changed && n.X != nil {
+				changed = t.isLineChangedRange(fset.Position(n.X.Pos()).Line,
+					fset.Position(n.X.End()).Line)
+			}
+
+			if changed {
+				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Body.Lbrace).Line+1)
+			}
+		case *ast.ForStmt:
+			// Judge if the for statement is changed:
+			// 1. If the for statement is changed, it means the whole for statement may be modified
+			// 2. Even if the Init and Assign parts are not changed, the change of the for statement may affect the whole statement structure
+			// 3. In this case, we need to add tracking statements to each case clause
+			changed = t.isLineChanged(fset.Position(n.For).Line)
+			if !changed && n.Init != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Init.Pos()).Line,
+					fset.Position(n.Init.End()).Line)
+			}
+			if !changed && n.Cond != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Cond.Pos()).Line,
+					fset.Position(n.Cond.End()).Line)
+			}
+			if !changed && n.Post != nil {
+				changed = t.isLineChangedRange(fset.Position(n.Post.Pos()).Line,
+					fset.Position(n.Post.End()).Line)
+			}
+
+			if changed {
+				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Body.Lbrace).Line+1)
+			}
+		}
+		return true
+	})
 }
 
 // processStatements analyzes and modifies statements by inserting additional code

@@ -24,7 +24,7 @@ func NewCleanExecutor(cfg *config.Config) *CleanExecutor {
 		cfg:   cfg,
 		files: make([]goatFile, 0),
 	}
-	executor.goatImportPath = utils.GoatPackageImportPath(config.GoModuleName(cfg.ProjectRoot), cfg.GoatPackagePath)
+	executor.goatImportPath = utils.GoatPackageImportPath(config.GoModuleName(), cfg.GoatPackagePath)
 	executor.goatPackageAlias = cfg.GoatPackageAlias
 	return executor
 }

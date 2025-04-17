@@ -6,9 +6,6 @@ const CONFIG_TEMPLATE = `# Goat configuration .goat.yaml
 # Please do modify when you know what you are doing.
 # Every time the field is changed, please rerun "goat patch" to update the tracking results.
 #
-## Project root path, default: ".", or you can use absolute path
-projectRoot: {{.ProjectRoot}}
-
 ## App name
 appName: {{.AppName}}
 

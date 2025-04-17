@@ -29,7 +29,7 @@ type DifferV4 struct {
 
 // NewDifferV4 creates a new code DifferV4
 func NewDifferV4(cfg *config.Config) (*DifferV4, error) {
-	repo, err := git.PlainOpen(cfg.ProjectRoot)
+	repo, err := git.PlainOpen(".")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
@@ -157,9 +157,4 @@ func (d *DifferV4) handleInsert(change *object.Change) (*FileChange, error) {
 	}
 	fc.LineChanges = lineChanges
 	return &fc, nil
-}
-
-// GetRepoPath returns the path of the repository
-func (d *DifferV4) GetRepoPath() string {
-	return d.cfg.ProjectRoot
 }

@@ -258,7 +258,7 @@ func resetGoatMain(fileContents string, goatImportPath string, goatPackageAlias 
 
 func prepareFiles(cfg *config.Config) (files []string, err error) {
 	files = make([]string, 0)
-	err = filepath.Walk(cfg.ProjectRoot, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
 
 		if err != nil {
 			return err
@@ -277,7 +277,7 @@ func prepareFiles(cfg *config.Config) (files []string, err error) {
 			return nil
 		}
 		// get relative path
-		files = append(files, utils.Rel(cfg.ProjectRoot, path))
+		files = append(files, utils.Rel(".", path))
 		return nil
 	})
 	return files, err
