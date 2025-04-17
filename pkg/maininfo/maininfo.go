@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -19,7 +20,7 @@ type MainPackageInfo struct {
 	Imports  []string `json:"imports"`
 }
 
-func (m *MainPackageInfo) ApplyMainEntry(packageAlias string, packagePath string, codes []string) ([]byte, error) {
+func (m *MainPackageInfo) ApplyMainEntry(cfg *printer.Config, packageAlias string, packagePath string, codes []string) ([]byte, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, m.MainFile, nil, parser.ParseComments)
 	if err != nil {
@@ -32,7 +33,7 @@ func (m *MainPackageInfo) ApplyMainEntry(packageAlias string, packagePath string
 			break
 		}
 	}
-	content, err := utils.AddCodes(fset, f, position, codes)
+	content, err := utils.AddCodes(cfg, fset, f, position, codes)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +47,7 @@ func (m *MainPackageInfo) ApplyMainEntry(packageAlias string, packagePath string
 	if err != nil {
 		return nil, err
 	}
-	content, err = utils.AddImport(packagePath, packageAlias, m.MainFile, content)
+	content, err = utils.AddImport(cfg, packagePath, packageAlias, m.MainFile, content)
 	if err != nil {
 		return nil, err
 	}

@@ -15,6 +15,8 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
+var defaultPrinterConfig = &printer.Config{Mode: printer.UseSpaces | printer.TabIndent, Tabwidth: 8, Indent: 0}
+
 func GetAstTree(fileName string, content []byte) (*token.FileSet, *ast.File, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, fileName, content, parser.ParseComments)
@@ -24,9 +26,14 @@ func GetAstTree(fileName string, content []byte) (*token.FileSet, *ast.File, err
 	return fset, f, nil
 }
 
-func FormatAst(fset *token.FileSet, f *ast.File) ([]byte, error) {
+func FormatAst(cfg *printer.Config, fset *token.FileSet, f *ast.File) ([]byte, error) {
 	var buf bytes.Buffer
-	cfg := printer.Config{Mode: printer.UseSpaces | printer.TabIndent, Tabwidth: 8, Indent: 0}
+	if cfg == nil {
+		cfg = defaultPrinterConfig
+	}
+	fmt.Printf("cfg: %+v\n", cfg)
+	fmt.Printf("defaultPrinterConfig: %+v\n", defaultPrinterConfig)
+	// cfg = defaultPrinterConfig
 	err := cfg.Fprint(&buf, fset, f)
 	if err != nil {
 		return nil, err
@@ -34,9 +41,12 @@ func FormatAst(fset *token.FileSet, f *ast.File) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func AddCodes(fset *token.FileSet, f *ast.File, position int, codes []string) ([]byte, error) {
+func AddCodes(cfg *printer.Config, fset *token.FileSet, f *ast.File, position int, codes []string) ([]byte, error) {
 	var src bytes.Buffer
-	if err := printer.Fprint(&src, fset, f); err != nil {
+	if cfg == nil {
+		cfg = defaultPrinterConfig
+	}
+	if err := cfg.Fprint(&src, fset, f); err != nil {
 		return nil, err
 	}
 	srcStr := src.String()
@@ -68,14 +78,14 @@ func AddCodes(fset *token.FileSet, f *ast.File, position int, codes []string) ([
 	if err != nil {
 		return nil, err
 	}
-	content, err := FormatAst(newFset, newF)
+	content, err := FormatAst(cfg, newFset, newF)
 	if err != nil {
 		return nil, err
 	}
 	return content, nil
 }
 
-func AddImport(pkgPath, alias string, filename string, content []byte) ([]byte, error) {
+func AddImport(cfg *printer.Config, pkgPath, alias string, filename string, content []byte) ([]byte, error) {
 	if pkgPath == "" {
 		return content, nil
 	}
@@ -96,14 +106,14 @@ func AddImport(pkgPath, alias string, filename string, content []byte) ([]byte, 
 			return nil, fmt.Errorf("failed to add import %s", pkgPath)
 		}
 	}
-	content, err = FormatAst(fset, f)
+	content, err = FormatAst(cfg, fset, f)
 	if err != nil {
 		return nil, err
 	}
 	return content, nil
 }
 
-func DeleteImport(pkgPath, alias string, filename string, content []byte) ([]byte, error) {
+func DeleteImport(cfg *printer.Config, pkgPath, alias string, filename string, content []byte) ([]byte, error) {
 	if pkgPath == "" {
 		return content, nil
 	}
@@ -124,7 +134,7 @@ func DeleteImport(pkgPath, alias string, filename string, content []byte) ([]byt
 			return nil, fmt.Errorf("failed to delete import %s", pkgPath)
 		}
 	}
-	content, err = FormatAst(fset, f)
+	content, err = FormatAst(cfg, fset, f)
 	if err != nil {
 		return nil, err
 	}

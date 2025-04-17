@@ -3,6 +3,7 @@ package goat
 import (
 	"encoding/json"
 	"fmt"
+	"go/printer"
 	"log"
 	"os"
 	"path/filepath"
@@ -174,7 +175,7 @@ func applyMainEntry(cfg *config.Config, goModule string,
 			continue
 		}
 		codes := increament.GetMainEntryInsertData(cfg.GoatPackageAlias, i)
-		_, err := mainInfo.ApplyMainEntry(cfg.GoatPackageAlias, importPath, codes)
+		_, err := mainInfo.ApplyMainEntry(cfg.PrinterConfig(), cfg.GoatPackageAlias, importPath, codes)
 		if err != nil {
 			log.Printf("failed to apply main entry: %v", err)
 			return err
@@ -183,7 +184,7 @@ func applyMainEntry(cfg *config.Config, goModule string,
 	return nil
 }
 
-func handleGoatDelete(fileContents string, goatImportPath string, goatPackageAlias string) (int, string, error) {
+func handleGoatDelete(cfg *printer.Config, fileContents string, goatImportPath string, goatPackageAlias string) (int, string, error) {
 	count, content, err := utils.ReplaceWithRegexp(config.TrackDeleteEndRegexp, fileContents,
 		func(older string) (newer string) {
 			return ""
@@ -196,7 +197,7 @@ func handleGoatDelete(fileContents string, goatImportPath string, goatPackageAli
 		indicates := config.TrackGenerateEndRegexp.FindAllStringIndex(content, -1)
 		if len(indicates) == 0 {
 			// delete the import path
-			bytes, err := utils.DeleteImport(goatImportPath, goatPackageAlias, "", []byte(content))
+			bytes, err := utils.DeleteImport(cfg, goatImportPath, goatPackageAlias, "", []byte(content))
 			if err != nil {
 				return 0, "", err
 			}
@@ -207,7 +208,7 @@ func handleGoatDelete(fileContents string, goatImportPath string, goatPackageAli
 	return count, fileContents, nil
 }
 
-func handleGoatInsert(fileContents string, goatImportPath string, goatPackageAlias string) (int, string, error) {
+func handleGoatInsert(cfg *printer.Config, fileContents string, goatImportPath string, goatPackageAlias string) (int, string, error) {
 	count, content, err := utils.ReplaceWithRegexp(config.TrackInsertRegexp, fileContents,
 		func(older string) (newer string) {
 			return increament.GetPackageInsertDataString()
@@ -217,7 +218,7 @@ func handleGoatInsert(fileContents string, goatImportPath string, goatPackageAli
 	}
 	if count > 0 {
 		// add the import path
-		bytes, err := utils.AddImport(goatImportPath, goatPackageAlias, "", []byte(content))
+		bytes, err := utils.AddImport(cfg, goatImportPath, goatPackageAlias, "", []byte(content))
 		if err != nil {
 			return 0, "", err
 		}
@@ -233,7 +234,7 @@ func resetGoatGenerate(fileContents string) (int, string, error) {
 		})
 }
 
-func resetGoatMain(fileContents string, goatImportPath string, goatPackageAlias string) (int, string, error) {
+func resetGoatMain(cfg *printer.Config, fileContents string, goatImportPath string, goatPackageAlias string) (int, string, error) {
 	count, content, err := utils.ReplaceWithRegexp(config.TrackMainEntryEndRegexp, fileContents,
 		func(older string) (newer string) {
 			return ""
@@ -246,7 +247,7 @@ func resetGoatMain(fileContents string, goatImportPath string, goatPackageAlias 
 		indicates := config.TrackGenerateEndRegexp.FindAllStringIndex(content, -1)
 		if len(indicates) == 0 {
 			// delete the import path
-			bytes, err := utils.DeleteImport(goatImportPath, goatPackageAlias, "", []byte(content))
+			bytes, err := utils.DeleteImport(cfg, goatImportPath, goatPackageAlias, "", []byte(content))
 			if err != nil {
 				return 0, "", err
 			}

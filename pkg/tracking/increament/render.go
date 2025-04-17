@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"text/template"
+
+	"github.com/monshunter/goat/pkg/config"
 )
 
 type Values struct {
@@ -15,6 +17,7 @@ type Values struct {
 	Components  []Component
 	TrackIds    []int
 	Race        bool
+	DataType    int
 }
 
 type Component struct {
@@ -24,14 +27,15 @@ type Component struct {
 }
 
 // NewValues creates a new Values instance
-func NewValues(packageName, version, name string, race bool) *Values {
+func NewValues(cfg *config.Config) *Values {
 	return &Values{
-		PackageName: packageName,
-		Version:     version,
-		Name:        name,
+		PackageName: cfg.GoatPackageName,
+		Version:     cfg.AppVersion,
+		Name:        cfg.AppName,
 		Components:  make([]Component, 0),
 		TrackIds:    make([]int, 0),
-		Race:        race,
+		Race:        cfg.Race,
+		DataType:    cfg.GetDataType().Int(),
 	}
 }
 

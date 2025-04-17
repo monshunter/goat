@@ -31,11 +31,12 @@ type IncreamentTrack struct {
 	trackStmtPlaceHolders  []string
 	source                 []string
 	blockScopes            BlockScopes
+	printerConfig          *printer.Config
 }
 
 func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
 	importPathPlaceHolder string, trackStmtPlaceHolders []string,
-	provider TrackTemplateProvider, granularity config.Granularity) (*IncreamentTrack, error) {
+	provider TrackTemplateProvider, granularity config.Granularity, printerConfig *printer.Config) (*IncreamentTrack, error) {
 	fileName := fileChange.Path
 	if !filepath.IsAbs(fileName) {
 		fileName = filepath.Join(basePath, fileName)
@@ -74,6 +75,7 @@ func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
 		source:                 strings.Split(string(content), "\n"),
 		blockScopes:            blockScopes,
 		visitedPositionInserts: make(map[InsertPosition]struct{}),
+		printerConfig:          printerConfig,
 	}, nil
 }
 
@@ -86,7 +88,7 @@ func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, er
 
 	srcStr := src.String()
 	positionInsert := t.positionInserts
-	// positionInsert.Unique()
+	positionInsert.Unique()
 	positionInsert.Sort()
 	// For each insertion position, insert the print statement into the source code string
 	var buf bytes.Buffer
@@ -152,7 +154,7 @@ func (t *IncreamentTrack) doInsert(fset *token.FileSet, f *ast.File) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	content, err := utils.FormatAst(newFset, newF)
+	content, err := utils.FormatAst(t.printerConfig, newFset, newF)
 	if err != nil {
 		return nil, err
 	}
@@ -263,6 +265,10 @@ func (t *IncreamentTrack) isLineChangedRange(start, end int) bool {
 }
 
 func (t *IncreamentTrack) addInsert(position CodeInsertPosition, codeType CodeInsertType, line int) {
+
+	for utils.IsGoComment(t.source[line-1]) {
+		line++
+	}
 	// Add a check to avoid duplicate inserts
 	// Use visitedPositionInserts map to record the inserted positions,
 	// This can prevent duplicate inserts in multiple AST scans.
@@ -286,7 +292,7 @@ func (t *IncreamentTrack) Track() (int, error) {
 	if t.count > 0 {
 		// do default insert
 		t.positionInserts.Reset()
-		content, err := utils.AddImport(t.importPathPlaceHolder, "", t.fileName, t.content)
+		content, err := utils.AddImport(t.printerConfig, t.importPathPlaceHolder, "", t.fileName, t.content)
 		if err != nil {
 			return 0, err
 		}
@@ -295,7 +301,7 @@ func (t *IncreamentTrack) Track() (int, error) {
 		// do provider insert
 		t.positionInserts.Reset()
 		pkgPath, alias := t.provider.ImportSpec()
-		content, err = utils.AddImport(pkgPath, alias, t.fileName, t.content)
+		content, err = utils.AddImport(t.printerConfig, pkgPath, alias, t.fileName, t.content)
 		if err != nil {
 			return 0, err
 		}
@@ -361,6 +367,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 		var changed bool
 		switch n := n.(type) {
 		case *ast.IfStmt:
+			// return true
 			// Judge if the if statement is changed:
 			// 1. If the if statement is changed, it means the whole if statement may be modified
 			// 2. Even if the Init part is not changed, the change of the if statement may affect the whole statement structure
@@ -387,7 +394,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 			}
 
 		case *ast.SwitchStmt:
-
+			// return true
 			// Judge if the switch keyword line is changed:
 			// 1. If the switch keyword line is changed, it means the whole switch statement may be modified
 			// 2. Even if the Init and Tag parts are not changed, the change of the switch keyword line may affect the whole statement structure
@@ -410,6 +417,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 				}
 			}
 		case *ast.TypeSwitchStmt:
+			// return true
 			changed = t.isLineChanged(fset.Position(n.Switch).Line)
 			if !changed && n.Init != nil {
 				changed = t.isLineChangedRange(fset.Position(n.Init.Pos()).Line,
@@ -417,6 +425,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 			}
 			if !changed && n.Assign != nil {
 				changed = t.isLineChangedRange(fset.Position(n.Assign.Pos()).Line,
+
 					fset.Position(n.Assign.End()).Line)
 			}
 
@@ -433,6 +442,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 				}
 			}
 		case *ast.CaseClause:
+			// return true
 			changed = t.isLineChanged(fset.Position(n.Case).Line)
 			if !changed && len(n.List) > 0 {
 				for _, expr := range n.List {
@@ -448,6 +458,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 			}
 
 		case *ast.CommClause:
+			// return true
 			changed = t.isLineChanged(fset.Position(n.Case).Line)
 			if !changed && n.Comm != nil {
 				changed = t.isLineChangedRange(fset.Position(n.Comm.Pos()).Line,
@@ -457,6 +468,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Colon).Line+1)
 			}
 		case *ast.RangeStmt:
+			// return true
 			// Judge if the range statement is changed:
 			// 1. If the range statement is changed, it means the whole range statement may be modified
 			// 2. Even if the Key and Value parts are not changed, the change of the range statement may affect the whole statement structure

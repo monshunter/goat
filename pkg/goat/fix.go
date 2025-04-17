@@ -16,11 +16,11 @@ type FixExecutor struct {
 	cfg                 *config.Config
 	mainPackageInfos    []maininfo.MainPackageInfo
 	fileTrackIdStartMap map[string]trackIdxInterval
-	goModule            string
-	goatImportPath      string
-	goatPackageAlias    string
 	// filesContents is the contents of the files
-	filesContents map[string]string
+	filesContents    map[string]string
+	goModule         string
+	goatImportPath   string
+	goatPackageAlias string
 	// changed is true if any `// + goat:delete`, `// + goat:insert` is found
 	changed bool
 }
@@ -80,14 +80,14 @@ func (f *FixExecutor) prepare() error {
 		updated := false
 		count := 0
 		// handle // + goat:delete
-		count, content, err = handleGoatDelete(string(contentBytes), f.goatImportPath, f.goatPackageAlias)
+		count, content, err = handleGoatDelete(f.cfg.PrinterConfig(), string(contentBytes), f.goatImportPath, f.goatPackageAlias)
 		if err != nil {
 			return err
 		}
 		updated = updated || count > 0
 		f.changed = f.changed || updated
 		// handle // + goat:insert
-		count, content, err = handleGoatInsert(content, f.goatImportPath, f.goatPackageAlias)
+		count, content, err = handleGoatInsert(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
 		if err != nil {
 			return err
 		}
@@ -108,7 +108,7 @@ func (f *FixExecutor) prepare() error {
 			}
 		}
 		if isMainEntry {
-			count, content, err = resetGoatMain(content, f.goatImportPath, f.goatPackageAlias)
+			count, content, err = resetGoatMain(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
 			if err != nil {
 				return err
 			}
@@ -163,7 +163,7 @@ func (f *FixExecutor) apply() error {
 
 	// apply goat_generated.go
 	componentTrackIdxs := getComponentTrackIdxs(f.fileTrackIdStartMap, f.mainPackageInfos)
-	values := increament.NewValues(f.cfg.GoatPackageName, f.cfg.AppVersion, f.cfg.AppName, f.cfg.Race)
+	values := increament.NewValues(f.cfg)
 	for _, component := range componentTrackIdxs {
 		values.AddComponent(component.componentId, component.component, component.trackIdx)
 	}
@@ -192,12 +192,12 @@ func (f *FixExecutor) apply() error {
 
 func (f *FixExecutor) applyTracks() error {
 	for file, content := range f.filesContents {
-		fset, f, err := utils.GetAstTree("", []byte(content))
+		fset, fileAst, err := utils.GetAstTree("", []byte(content))
 		if err != nil {
 			log.Printf("error: failed to get ast tree: %s, file: %s\n", err, file)
 			return err
 		}
-		contentBytes, err := utils.FormatAst(fset, f)
+		contentBytes, err := utils.FormatAst(f.cfg.PrinterConfig(), fset, fileAst)
 		if err != nil {
 			log.Printf("error: failed to format ast: %s, file: %s\n", err, file)
 			return err

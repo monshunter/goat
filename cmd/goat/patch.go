@@ -35,6 +35,11 @@ Examples:
 				log.Printf("failed to load config: %v", err)
 				return err
 			}
+			// check if the project is already patched
+			if _, err := os.Stat(cfg.GoatGeneratedFile()); err == nil {
+				return fmt.Errorf("project is already patched, please run `goat clean` first")
+			}
+
 			executor := goat.NewPatchExecutor(cfg)
 			return executor.Run()
 		},

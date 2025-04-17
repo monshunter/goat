@@ -56,7 +56,7 @@ func (p *PatchExecutor) Run() error {
 
 	componentTrackIdxs := getComponentTrackIdxs(p.fileTrackIdStartMap, p.mainPackageInfos)
 
-	values := increament.NewValues(p.cfg.GoatPackageName, p.cfg.AppVersion, p.cfg.AppName, p.cfg.Race)
+	values := increament.NewValues(p.cfg)
 	for _, component := range componentTrackIdxs {
 		values.AddComponent(component.componentId, component.component, component.trackIdx)
 	}
@@ -108,7 +108,7 @@ func (p *PatchExecutor) initTracks() error {
 	for i, change := range p.changes {
 		tracker, err := p.handleDiffChange(change)
 		if err != nil {
-			log.Printf("failed to get tracker: %v", err)
+			log.Printf("failed to handle diff change: %v", err)
 			return err
 		}
 		trackers[i] = tracker
@@ -121,7 +121,8 @@ func (p *PatchExecutor) initTracks() error {
 func (p *PatchExecutor) handleDiffChange(change *diff.FileChange) (tracking.Tracker, error) {
 	granularity := p.cfg.GetGranularity()
 	tracker, err := tracking.NewIncreamentTrack(".", change,
-		increament.TrackImportPathPlaceHolder, increament.GetPackageInsertData(), nil, granularity)
+		increament.TrackImportPathPlaceHolder, increament.GetPackageInsertData(),
+		nil, granularity, p.cfg.PrinterConfig())
 	if err != nil {
 		log.Printf("failed to get tracker: %v", err)
 		return nil, err

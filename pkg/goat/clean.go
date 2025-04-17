@@ -74,25 +74,28 @@ func (e *CleanExecutor) prepareContent(filename string) (string, bool, error) {
 	content := string(contentBytes)
 	changed := false
 	// handle +goat:delete
-	count, newContent, err := utils.ReplaceWithRegexp(config.TrackDeleteEndRegexp, content, func(older string) (newer string) {
-		return ""
-	})
+	count, newContent, err := utils.ReplaceWithRegexp(config.TrackDeleteEndRegexp,
+		content, func(older string) (newer string) {
+			return ""
+		})
 	if err != nil {
 		return "", false, err
 	}
 	changed = changed || count > 0
 	// handle +goat:insert
-	count, newContent, err = utils.ReplaceWithRegexp(config.TrackInsertRegexp, newContent, func(older string) (newer string) {
-		return ""
-	})
+	count, newContent, err = utils.ReplaceWithRegexp(config.TrackInsertRegexp,
+		newContent, func(older string) (newer string) {
+			return ""
+		})
 	if err != nil {
 		return "", false, err
 	}
 	changed = changed || count > 0
 	// handle +goat:generate
-	count, newContent, err = utils.ReplaceWithRegexp(config.TrackGenerateEndRegexp, newContent, func(older string) (newer string) {
-		return ""
-	})
+	count, newContent, err = utils.ReplaceWithRegexp(config.TrackGenerateEndRegexp,
+		newContent, func(older string) (newer string) {
+			return ""
+		})
 	if err != nil {
 		return "", false, err
 	}
@@ -116,7 +119,7 @@ func (e *CleanExecutor) prepareContent(filename string) (string, bool, error) {
 
 	if changed {
 		// remove import
-		bytes, err := utils.DeleteImport(e.goatImportPath, e.goatPackageAlias, "", []byte(newContent))
+		bytes, err := utils.DeleteImport(e.cfg.PrinterConfig(), e.goatImportPath, e.goatPackageAlias, "", []byte(newContent))
 		if err != nil {
 			return "", false, err
 		}

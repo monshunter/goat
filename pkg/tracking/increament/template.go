@@ -19,7 +19,9 @@ import (
 	{{ if .Race -}}
 	"sync/atomic"
 	{{ end -}}
+	"sort"
 )
+
 // application version
 const VERSION = "{{.Version}}"
 // application name
@@ -37,28 +39,33 @@ const (
 )
 
 // track ID names
-var TrackIdNames []string
+var TrackIdNames [TRACK_ID_END]string
 
 // track ID status record - use slice instead of map to improve performance
-var trackIds []int32
+var trackIdStatus [TRACK_ID_END]uint32
 
 // initialize track IDs
 func init() {
-	TrackIdNames = make([]string, TRACK_ID_END)
 	for i := 1; i < TRACK_ID_END; i++ {
 		TrackIdNames[i] = fmt.Sprintf("TRACK_ID_%d", i)
 	}
-	// initialize track ID status slice
-	trackIds = make([]int32, TRACK_ID_END)
 }
 
 // Track track function
 func Track(id trackId) {
 	if id > 0 && id < TRACK_ID_END {
 		{{ if .Race -}}
-		atomic.StoreInt32(&trackIds[id], 1)
+		   {{ if eq .DataType 1 -}}
+			atomic.StoreUint32(&trackIdStatus[id], 1)
+			{{- else -}}
+			atomic.AndUint32(&trackIdStatus[id], 1)
+			{{- end -}}
 		{{- else -}}
-		trackIds[id] = 1
+			{{ if eq .DataType 1 -}}
+			trackIdStatus[id] = 1
+			{{- else -}}
+			trackIdStatus[id]++
+			{{- end -}}
 		{{- end }}
 	}
 }
@@ -104,15 +111,39 @@ var COMPONENT_TRACK_IDS = map[Component][]trackId{ {{- range .Components}}
 	COMPONENT_{{ .ID }}: COMPONENT_{{ .ID }}_TRACK_IDS,{{end}}
 	// ...
 }
+
+// Item struct
+type Item struct {
+	// track ID
+	ID int ` + "`json:\"id\"`" + `
+	// track name
+	Name string ` + "`json:\"name\"`" + `
+	// track count
+	Count uint32 ` + "`json:\"count\"`" + `
+}
+
+// Items slice
+type Items []Item
+
 // Metrics struct
 type Metrics struct {
-	Total   int             ` + "`json:\"total\"`" + `
-	Covered int             ` + "`json:\"covered\"`" + `
-	Metrics map[string]bool ` + "`json:\"metrics\"`" + `
+	// total track count
+	Total       int    ` + "`json:\"total\"`" + `
+	// covered track count
+	Covered     int    ` + "`json:\"covered\"`" + `
+	// covered rate
+	CoveredRate int    ` + "`json:\"coveredRate\"`" + `
+	// track items
+	Items       Items  ` + "`json:\"items\"`" + `
 }
+
 // ComponentResult struct
 type ComponentResult struct {
-	Component Component ` + "`json:\"component\"`" + `
+	// component
+	ID Component ` + "`json:\"id\"`" + `
+	// component name
+	Name string ` + "`json:\"name\"`" + `
+	// metrics
 	Metrics   Metrics   ` + "`json:\"metrics\"`" + `
 }
 // Results struct
@@ -156,23 +187,29 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	results := make([]ComponentResult, 0, len(cms))
 	for _, component := range cms {
-		metrics := make(map[string]bool)
 		covered := 0
 		idxs := COMPONENT_TRACK_IDS[component]
+		items := make(Items, 0, len(idxs))
 		for _, id := range idxs {
 			{{ if .Race -}}
-			isTracked := atomic.LoadInt32(&trackIds[id]) == 1
+			count := atomic.LoadUint32(&trackIdStatus[id])
 			{{- else -}}
-			isTracked := trackIds[id] == 1
+			count := trackIdStatus[id]
 			{{- end }}
-			metrics[TrackIdNames[id]] = isTracked
-			if isTracked {
+			items = append(items, Item{ID: id, Name: TrackIdNames[id], Count: count})
+			if count > 0 {
 				covered++
 			}
 		}
+
+		sort.Slice(items, func(i, j int) bool {
+			return items[i].Count < items[j].Count
+		})
+
 		results = append(results, ComponentResult{
-			Component: component,
-			Metrics:   Metrics{Total: len(idxs), Covered: covered, Metrics: metrics},
+			ID:      component,
+			Name:    GetComponentName(component),
+			Metrics: Metrics{Total: len(idxs), Covered: covered, CoveredRate: covered * 100 / len(idxs), Items: items},
 		})
 	}
 	// output JSON

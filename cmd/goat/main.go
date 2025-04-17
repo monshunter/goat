@@ -11,7 +11,7 @@ import (
 var configYaml string
 
 func init() {
-	configYaml = ".goat.yaml"
+	configYaml = "goat.yaml"
 	if os.Getenv("GOAT_CONFIG") != "" {
 		configYaml = os.Getenv("GOAT_CONFIG")
 	}

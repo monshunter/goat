@@ -7,10 +7,18 @@ import (
 	"reflect"
 	"regexp"
 	"testing"
+
+	"github.com/monshunter/goat/pkg/config"
 )
 
 func TestNewValues(t *testing.T) {
-	v := NewValues("testpkg", "1.0.0", "TestApp", true)
+	cfg := &config.Config{
+		GoatPackageName: "testpkg",
+		AppVersion:      "1.0.0",
+		AppName:         "TestApp",
+		Race:            true,
+	}
+	v := NewValues(cfg)
 
 	if v.PackageName != "testpkg" {
 		t.Errorf("Expected PackageName to be testpkg, got %s", v.PackageName)
@@ -33,7 +41,13 @@ func TestNewValues(t *testing.T) {
 }
 
 func TestAddComponent(t *testing.T) {
-	v := NewValues("testpkg", "1.0.0", "TestApp", true)
+	cfg := &config.Config{
+		GoatPackageName: "testpkg",
+		AppVersion:      "1.0.0",
+		AppName:         "TestApp",
+		Race:            true,
+	}
+	v := NewValues(cfg)
 
 	trackIds := []int{1, 2, 3}
 	v.AddComponent(1, "TestComponent", trackIds)
@@ -54,7 +68,13 @@ func TestAddComponent(t *testing.T) {
 	}
 }
 func TestAddTrackId(t *testing.T) {
-	v := NewValues("testpkg", "1.0.0", "TestApp", true)
+	cfg := &config.Config{
+		GoatPackageName: "testpkg",
+		AppVersion:      "1.0.0",
+		AppName:         "TestApp",
+		Race:            true,
+	}
+	v := NewValues(cfg)
 
 	v.AddTrackId(1)
 	v.AddTrackId(2)
@@ -123,12 +143,18 @@ func TestValidate(t *testing.T) {
 }
 
 func TestMergeValues(t *testing.T) {
-	v1 := NewValues("testpkg", "1.0.0", "TestApp", true)
+	cfg := &config.Config{
+		GoatPackageName: "testpkg",
+		AppVersion:      "1.0.0",
+		AppName:         "TestApp",
+		Race:            true,
+	}
+	v1 := NewValues(cfg)
 	v1.AddComponent(1, "Component1", []int{1, 2})
 	v1.AddTrackId(1)
 	v1.AddTrackId(2)
 
-	v2 := NewValues("otherpkg", "2.0.0", "OtherApp", false)
+	v2 := NewValues(cfg)
 	v2.AddComponent(1, "Component1Updated", []int{2, 3})
 	v2.AddComponent(2, "Component2", []int{4, 5})
 	v2.AddTrackId(2)
@@ -165,7 +191,13 @@ func TestMergeValues(t *testing.T) {
 }
 
 func TestClone(t *testing.T) {
-	v := NewValues("testpkg", "1.0.0", "TestApp", true)
+	cfg := &config.Config{
+		GoatPackageName: "testpkg",
+		AppVersion:      "1.0.0",
+		AppName:         "TestApp",
+		Race:            true,
+	}
+	v := NewValues(cfg)
 	v.AddComponent(1, "Component1", []int{1, 2})
 	v.AddTrackId(1)
 	v.AddTrackId(2)
@@ -195,7 +227,13 @@ func TestClone(t *testing.T) {
 }
 
 func TestRenderWithCustomTemplate(t *testing.T) {
-	v := NewValues("testpkg", "1.0.0", "TestApp", true)
+	cfg := &config.Config{
+		GoatPackageName: "testpkg",
+		AppVersion:      "1.0.0",
+		AppName:         "TestApp",
+		Race:            true,
+	}
+	v := NewValues(cfg)
 	v.AddTrackId(1)
 
 	template := "PackageName: {{.PackageName}}, Name: {{.Name}}"
@@ -229,7 +267,13 @@ func TestSave(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	v := NewValues("testpkg", "1.0.0", "TestApp", true)
+	cfg := &config.Config{
+		GoatPackageName: "testpkg",
+		AppVersion:      "1.0.0",
+		AppName:         "TestApp",
+		Race:            true,
+	}
+	v := NewValues(cfg)
 	v.AddTrackId(1)
 
 	filePath := filepath.Join(tempDir, "test_output.go")
@@ -246,7 +290,13 @@ func TestSave(t *testing.T) {
 	}
 }
 func TestRenderToString(t *testing.T) {
-	v := NewValues("testpkg", "1.0.0", "TestApp", true)
+	cfg := &config.Config{
+		GoatPackageName: "testpkg",
+		AppVersion:      "1.0.0",
+		AppName:         "TestApp",
+		Race:            true,
+	}
+	v := NewValues(cfg)
 	v.AddTrackId(1)
 
 	// Cannot directly modify the constant Template, use RenderWithCustomTemplate method for testing

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"go/printer"
 	"html/template"
 	"os"
 	"path/filepath"
@@ -67,6 +68,51 @@ const (
 	GranularityFuncStr  = "func"
 )
 
+// PrinterConfigMode is the mode of the printer config
+type PrinterConfigMode string
+
+// PrinterConfigModeNone is the none mode of the printer config
+// default  useSpaces | tabIndent
+const (
+	PrinterConfigModeNone PrinterConfigMode = ""
+	// same as printer.UseSpaces
+	PrinterConfigModeUseSpaces PrinterConfigMode = "useSpaces"
+	// same as printer.TabIndent
+	PrinterConfigModeTabIndent PrinterConfigMode = "tabIndent"
+	// same as printer.SourcePos
+	PrinterConfigModeSourcePos PrinterConfigMode = "sourcePos"
+	// same as printer.RawFormat
+	PrinterConfigModeRawFormat PrinterConfigMode = "rawFormat"
+)
+
+// IsValid checks if the printer config mode is valid
+func (p PrinterConfigMode) IsValid() bool {
+	switch p {
+	case PrinterConfigModeNone, PrinterConfigModeUseSpaces, PrinterConfigModeTabIndent,
+		PrinterConfigModeSourcePos, PrinterConfigModeRawFormat:
+		return true
+	default:
+		return false
+	}
+}
+
+// Mode returns the printer mode
+func (p PrinterConfigMode) Mode() printer.Mode {
+	switch p {
+	case PrinterConfigModeUseSpaces:
+		return printer.UseSpaces
+	case PrinterConfigModeTabIndent:
+		return printer.TabIndent
+	case PrinterConfigModeSourcePos:
+		return printer.SourcePos
+	case PrinterConfigModeRawFormat:
+		return printer.RawFormat
+	default:
+		return printer.Mode(0)
+	}
+}
+
+// ToGranularity converts a string to a granularity
 func ToGranularity(s string) (Granularity, error) {
 	switch s {
 	case GranularityLineStr:
@@ -80,29 +126,91 @@ func ToGranularity(s string) (Granularity, error) {
 	}
 }
 
+// IsValid checks if the granularity is valid
 func (g Granularity) IsValid() bool {
 	return g == GranularityLine || g == GranularityBlock || g == GranularityFunc
 }
 
+// String returns the string representation of the granularity
 func (g Granularity) String() string {
 	return []string{GranularityLineStr, GranularityBlockStr, GranularityFuncStr}[g-1]
 }
 
+// Int returns the integer representation of the granularity
 func (g Granularity) Int() int {
 	return int(g)
 }
 
+// IsLine checks if the granularity is line
 func (g Granularity) IsLine() bool {
 	return g == GranularityLine
 }
 
+// IsBlock checks if the granularity is block
 func (g Granularity) IsBlock() bool {
 	return g == GranularityBlock
 }
 
+// IsFunc checks if the granularity is func
 func (g Granularity) IsFunc() bool {
 	return g == GranularityFunc
 }
+
+// DataType is the type of the data
+type DataType int
+
+// DataTypeTruth is the truth type
+const (
+	_ DataType = iota
+	// DataTypeTruth is the truth type
+	DataTypeTruth // default
+	// DataTypeCount is the count type
+	DataTypeCount
+	// DataTypeAverage is the average type
+	DataTypeAverage
+)
+
+// String returns the string representation of the data type
+func (d DataType) String() string {
+	return dataTypeNames[d]
+}
+
+// IsValid checks if the data type is valid
+func (d DataType) IsValid() bool {
+	switch d {
+	case DataTypeTruth, DataTypeCount, DataTypeAverage:
+		return true
+	default:
+		return false
+	}
+}
+
+// dataTypeNames is the names of the data types
+var dataTypeNames = []string{
+	DataTypeTruth:   "truth",
+	DataTypeCount:   "count",
+	DataTypeAverage: "average",
+}
+
+// Int returns the integer representation of the data type
+func (d DataType) Int() int {
+	return int(d)
+}
+
+func GetDataType(s string) (DataType, error) {
+	switch s {
+	case "truth":
+		return DataTypeTruth, nil
+	case "count":
+		return DataTypeCount, nil
+	case "average":
+		return DataTypeAverage, nil
+	default:
+		return DataTypeTruth, fmt.Errorf("invalid data type: %s", s)
+	}
+}
+
+// Config configuration struct
 
 // Config configuration struct
 type Config struct {
@@ -134,11 +242,21 @@ type Config struct {
 	CloneBranch bool `yaml:"cloneBranch"` // true, false
 	// Main packages to track
 	MainEntries []string `yaml:"mainEntries"`
-	// Main package coverage strategy
-	TrackStrategy string `yaml:"trackStrategy"` // project, package // default: project
-
+	// Printer config
+	// PrinterConfigMode is the mode of the printer config
+	// default  useSpaces | tabIndent
+	PrinterConfigMode []PrinterConfigMode `yaml:"printerConfigMode"` // default: useSpaces | tabIndent
+	// PrinterConfigTabwidth is the tab width of the printer config
+	PrinterConfigTabwidth int `yaml:"printerConfigTabwidth"` // default: 8
+	// PrinterConfigIndent is the indent of the printer config
+	PrinterConfigIndent int `yaml:"printerConfigIndent"` // default: 0
+	// printerConfig is the printer config
+	printerConfig *printer.Config `yaml:"-"`
+	// Data type
+	DataType string `yaml:"dataType"` // default: truth
 }
 
+// Validate validates the config
 func (c *Config) Validate() error {
 	if c.Granularity == "" {
 		c.Granularity = GranularityBlockStr
@@ -172,14 +290,6 @@ func (c *Config) Validate() error {
 		c.MainEntries = []string{"*"}
 	}
 
-	if c.TrackStrategy == "" {
-		c.TrackStrategy = "project"
-	}
-
-	if c.TrackStrategy != "project" && c.TrackStrategy != "package" {
-		return fmt.Errorf("invalid track strategy: %s", c.TrackStrategy)
-	}
-
 	if c.GoatPackageName == "" {
 		c.GoatPackageName = "goat"
 	}
@@ -191,11 +301,41 @@ func (c *Config) Validate() error {
 	if c.GoatPackagePath == "" {
 		c.GoatPackagePath = "goat"
 	}
+
+	if c.PrinterConfigMode == nil {
+		c.PrinterConfigMode = []PrinterConfigMode{PrinterConfigModeUseSpaces, PrinterConfigModeTabIndent}
+	}
+
+	for _, mode := range c.PrinterConfigMode {
+		if !mode.IsValid() {
+			return fmt.Errorf("invalid printer config mode: %s", mode)
+		}
+	}
+
+	if c.PrinterConfigIndent < 0 {
+		c.PrinterConfigIndent = 0
+	}
+
+	if c.PrinterConfigTabwidth < 1 {
+		c.PrinterConfigTabwidth = 8
+	}
+
+	if c.DataType == "" {
+		c.DataType = "truth"
+	}
+
+	dt, err := GetDataType(c.DataType)
+	if err != nil {
+		return fmt.Errorf("invalid data type: %w", err)
+	}
+	c.DataType = dt.String()
+
 	// ignore goat_generated.go
 	c.Ignores = append(c.Ignores, c.GoatGeneratedFile())
 	return nil
 }
 
+// GetGranularity returns the granularity
 func (c *Config) GetGranularity() Granularity {
 	granularity, err := ToGranularity(c.Granularity)
 	if err != nil {
@@ -204,6 +344,7 @@ func (c *Config) GetGranularity() Granularity {
 	return granularity
 }
 
+// IsMainEntry checks if the entry is a main entry
 func (c *Config) IsMainEntry(entry string) bool {
 	for _, mainEntry := range c.MainEntries {
 		if mainEntry == "*" || mainEntry == entry {
@@ -213,8 +354,34 @@ func (c *Config) IsMainEntry(entry string) bool {
 	return false
 }
 
+// GoatGeneratedFile returns the goat generated file path
 func (c *Config) GoatGeneratedFile() string {
 	return filepath.Join(c.GoatPackagePath, goatGeneratedFile)
+}
+
+func (c *Config) PrinterConfig() *printer.Config {
+	if c.printerConfig != nil {
+		return c.printerConfig
+	}
+	mode := printer.Mode(0)
+	for _, m := range c.PrinterConfigMode {
+		mode |= m.Mode()
+	}
+	cfg := &printer.Config{
+		Mode:     mode,
+		Tabwidth: c.PrinterConfigTabwidth,
+		Indent:   c.PrinterConfigIndent,
+	}
+	c.printerConfig = cfg
+	return cfg
+}
+
+func (c *Config) GetDataType() DataType {
+	dt, err := GetDataType(c.DataType)
+	if err != nil {
+		return DataTypeTruth
+	}
+	return dt
 }
 
 // LoadConfig loads configuration from file
