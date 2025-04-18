@@ -175,10 +175,11 @@ func (b BlockScopes) Search(line int) int {
 	return idx
 }
 
+// BlockScopesOfGoAST returns the block scopes of the go ast
 func BlockScopesOfGoAST(filename string, content []byte) (BlockScopes, error) {
 
 	fset := token.NewFileSet()
-	blockScopes := []BlockScope{}
+	blockScopes := BlockScopes{}
 	astFile, err := parser.ParseFile(fset, filename, content, parser.ParseComments)
 	if err != nil {
 		return nil, err
@@ -194,6 +195,11 @@ func BlockScopesOfGoAST(filename string, content []byte) (BlockScopes, error) {
 				StartLine: fset.Position(declFunc.Pos()).Line,
 				EndLine:   fset.Position(declFunc.End()).Line,
 			})
+
+			if declFunc.Body == nil {
+				continue
+			}
+			// Traverse the statements in the function body
 			for _, stmt := range declFunc.Body.List {
 				ast.Inspect(stmt, func(node ast.Node) bool {
 					if node == nil {
@@ -251,5 +257,60 @@ func BlockScopesOfGoAST(filename string, content []byte) (BlockScopes, error) {
 			}
 		}
 	}
+	blockScopes.Sort()
+	return blockScopes, nil
+}
+
+// FunctionScopesOfGoAST returns the function scopes of the go ast
+func FunctionScopesOfGoAST(filename string, content []byte) (BlockScopes, error) {
+
+	fset := token.NewFileSet()
+	blockScopes := BlockScopes{}
+	astFile, err := parser.ParseFile(fset, filename, content, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(string(content), "\n")
+	// Add this scope to make the whole file as a function scope
+	// This can make the search function works
+	// But index 0 is not a function scope
+	blockScopes = append(blockScopes, BlockScope{
+		StartLine: 1,
+		EndLine:   len(lines),
+	})
+
+	for _, decl := range astFile.Decls {
+		switch decl := decl.(type) {
+		case *ast.FuncDecl:
+			blockScopes = append(blockScopes, BlockScope{
+				StartLine: fset.Position(decl.Pos()).Line,
+				EndLine:   fset.Position(decl.End()).Line,
+			})
+		case *ast.GenDecl:
+			if len(decl.Specs) == 0 {
+				continue
+			}
+			for _, spec := range decl.Specs {
+				switch spec := spec.(type) {
+				case *ast.ValueSpec:
+					ast.Inspect(spec, func(node ast.Node) bool {
+						if node == nil {
+							return false
+						}
+						switch n := node.(type) {
+						case *ast.FuncLit:
+							blockScopes = append(blockScopes, BlockScope{
+								StartLine: fset.Position(n.Pos()).Line,
+								EndLine:   fset.Position(n.End()).Line,
+							})
+						}
+						return true
+					})
+				}
+			}
+		}
+	}
+	blockScopes.Sort()
 	return blockScopes, nil
 }

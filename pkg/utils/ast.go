@@ -31,9 +31,6 @@ func FormatAst(cfg *printer.Config, fset *token.FileSet, f *ast.File) ([]byte, e
 	if cfg == nil {
 		cfg = defaultPrinterConfig
 	}
-	fmt.Printf("cfg: %+v\n", cfg)
-	fmt.Printf("defaultPrinterConfig: %+v\n", defaultPrinterConfig)
-	// cfg = defaultPrinterConfig
 	err := cfg.Fprint(&buf, fset, f)
 	if err != nil {
 		return nil, err

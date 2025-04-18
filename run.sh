@@ -4,18 +4,23 @@
 # publishBranch="c9d69d0f"
 # publishBranch=""
 
-project="/Users/tanzhangyu/Documents/work-proj/proj/registrycontroller"
-stableBranch="c5f48fd"
-publishBranch="0709dcc"
+# project="/Users/tanzhangyu/Documents/work-proj/proj/registrycontroller"
+# stableBranch="c5f48fd"
+# stableBranch="7a956c46"
+# publishBranch="0709dcc"
 
 # project="/Users/tanzhangyu/Documents/my-opensources/ast-practice"
 # # stableBranch="4ee3b9c"
-# stableBranch="142f249"
+# # stableBranch="142f249"
+# # stableBranch="2289f3f"
+# # stableBranch="35c5d85"
+# stableBranch="b353ec2"
 # publishBranch="HEAD"
 
-# project="/Users/tanzhangyu/Documents/opensources/kubernetes"
-# stableBranch="release-1.31"
-# publishBranch="release-1.32"
+project="/Users/tanzhangyu/Documents/opensources/kubernetes"
+stableBranch="release-1.31"
+publishBranch="release-1.32"
+# pkg/controller/volume/selinuxwarning/selinux_warning_controller.go
 # c5f48fd 0709dcc
 go install ./cmd/goat
 # time bin/goat init $project --stable $stableBranch --publish $publishBranch --diff-precision 2
