@@ -143,7 +143,7 @@ func (p *PatchExecutor) replaceTracks() (int, error) {
 	for i, tracker := range p.trackers {
 		count, err := tracker.Replace(increament.TrackStmtPlaceHolder, increament.IncreamentReplaceStmt(p.cfg.GoatPackageAlias, start))
 		if err != nil || count != tracker.Count() {
-			log.Printf("failed to replace stmt: i: %d, err: %v, count: %d, expected: %d\n", i, err, count, tracker.Count())
+			log.Printf("failed to replace stmt: file: %s, err: %v, count: %d, expected: %d\n", tracker.TargetFile(), err, count, tracker.Count())
 			return 0, err
 		}
 		p.fileTrackIdStartMap[p.changes[i].Path] = trackIdxInterval{start: start, end: start + count - 1}

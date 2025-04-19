@@ -331,7 +331,18 @@ func (c *Config) Validate() error {
 	c.DataType = dt.String()
 
 	// ignore goat_generated.go
-	c.Ignores = append(c.Ignores, c.GoatGeneratedFile())
+	goatFile := c.GoatGeneratedFile()
+	found := false
+	for _, file := range c.Ignores {
+		if file == goatFile {
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.Ignores = append(c.Ignores, goatFile)
+	}
+
 	return nil
 }
 

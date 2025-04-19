@@ -80,13 +80,10 @@ Examples:
 
 			// process ignore file list
 			var ignores []string
+			ignoresStr = strings.TrimSpace(ignoresStr)
 			if ignoresStr != "" {
 				ignores = strings.Split(ignoresStr, ",")
-			} else {
-				// use default ignore file list
-				ignores = []string{".git", ".gitignore", ".DS_Store", ".idea", ".vscode", ".venv"}
 			}
-
 			// process main package list
 			var mainEntries []string
 			if mainEntriesStr != "" {

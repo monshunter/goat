@@ -16,6 +16,7 @@ type Tracker interface {
 	Bytes() []byte
 	Count() int
 	Save(path string) error
+	TargetFile() string
 }
 
 type CodeInsertPosition int
@@ -87,20 +88,24 @@ type TrackTemplateProvider interface {
 }
 
 type InsertPosition struct {
-	position  CodeInsertPosition
-	codeType  CodeInsertType
-	positions int
+	position CodeInsertPosition
+	codeType CodeInsertType
+	line     int
+	column   int
 }
 
 type InsertPositions []InsertPosition
 
-func (p *InsertPositions) Insert(position CodeInsertPosition, codeType CodeInsertType, positions int) {
-	*p = append(*p, InsertPosition{position: position, codeType: codeType, positions: positions})
+func (p *InsertPositions) Insert(position CodeInsertPosition, codeType CodeInsertType, line int, column int) {
+	*p = append(*p, InsertPosition{position: position, codeType: codeType, line: line, column: column})
 }
 
 func (p *InsertPositions) Sort() {
 	slices.SortFunc(*p, func(a, b InsertPosition) int {
-		return a.positions - b.positions
+		if a.line == b.line {
+			return a.position.Int() - b.position.Int()
+		}
+		return a.line - b.line
 	})
 }
 

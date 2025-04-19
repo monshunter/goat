@@ -18,23 +18,24 @@ import (
 )
 
 type IncreamentTrack struct {
-	basePath               string
-	fileChange             *diff.FileChange
-	provider               TrackTemplateProvider
-	count                  int
-	content                []byte
-	fileName               string
-	positionInserts        InsertPositions
-	visitedPositionInserts map[InsertPosition]struct{}
-	lastBlockInsertLine    int
-	granularity            config.Granularity
-	importPathPlaceHolder  string
-	trackStmtPlaceHolders  []string
-	source                 []string
-	sourceLength           int
-	blockScopes            BlockScopes
-	functionScopes         BlockScopes
-	printerConfig          *printer.Config
+	basePath                    string
+	fileChange                  *diff.FileChange
+	provider                    TrackTemplateProvider
+	count                       int
+	content                     []byte
+	fileName                    string
+	insertedPositions           InsertPositions
+	singleLineInsertedPositions InsertPositions
+	visitedInsertedPositions    map[InsertPosition]struct{}
+	lastBlockInsertLine         int
+	granularity                 config.Granularity
+	importPathPlaceHolder       string
+	trackStmtPlaceHolders       []string
+	source                      []string
+	sourceLength                int
+	blockScopes                 BlockScopes
+	functionScopes              BlockScopes
+	printerConfig               *printer.Config
 }
 
 func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
@@ -72,99 +73,128 @@ func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
 
 	log.Println("start tracking file:", fileName)
 	return &IncreamentTrack{
-		basePath:               basePath,
-		fileChange:             fileChange,
-		provider:               provider,
-		fileName:               fileName,
-		content:                content,
-		positionInserts:        InsertPositions{},
-		granularity:            granularity,
-		importPathPlaceHolder:  importPathPlaceHolder,
-		trackStmtPlaceHolders:  trackStmtPlaceHolders,
-		source:                 strings.Split(string(content), "\n"),
-		sourceLength:           len(content),
-		blockScopes:            blockScopes,
-		functionScopes:         functionScopes,
-		visitedPositionInserts: make(map[InsertPosition]struct{}),
-		printerConfig:          printerConfig,
+		basePath:                    basePath,
+		fileChange:                  fileChange,
+		provider:                    provider,
+		fileName:                    fileName,
+		content:                     content,
+		insertedPositions:           InsertPositions{},
+		singleLineInsertedPositions: InsertPositions{},
+		granularity:                 granularity,
+		importPathPlaceHolder:       importPathPlaceHolder,
+		trackStmtPlaceHolders:       trackStmtPlaceHolders,
+		source:                      strings.Split(string(content), "\n"),
+		sourceLength:                len(content),
+		blockScopes:                 blockScopes,
+		functionScopes:              functionScopes,
+		visitedInsertedPositions:    make(map[InsertPosition]struct{}),
+		printerConfig:               printerConfig,
 	}, nil
 }
 
 func (t *IncreamentTrack) doInsert() ([]byte, error) {
 
-	if len(t.positionInserts) == 0 {
+	if t.count == 0 {
 		return t.content, nil
 	}
 
-	frontStmts, backStmts, frontComments, backComments, insertLen := t.getContentsToInsert()
-	positionInsert := t.positionInserts
-	positionInsert.Unique()
-	positionInsert.Sort()
-	// For each insertion position, insert the print statement into the source code string
+	frontStmts, backStmts, frontComments, backComments := t.getContentsToInsert()
+	adjustLength := calculateInsertLength(t.insertedPositions, t.trackStmtPlaceHolders, frontStmts, backStmts, frontComments, backComments)
+	t.insertedPositions.Unique()
+	t.insertedPositions.Sort()
+	t.singleLineInsertedPositions.Unique()
+	t.singleLineInsertedPositions.Sort()
 
 	posIdx := 0
 	i := 0
 	sources := t.source
 	var buf bytes.Buffer
-	buf.Grow(t.sourceLength + insertLen)
-
-	for ; i < len(sources) && posIdx < len(positionInsert); i++ {
-		if i == positionInsert[posIdx].positions-1 {
-			pos := positionInsert[posIdx]
-			// write default track stmt place holders
-			for _, trackStmtPlaceHolder := range t.trackStmtPlaceHolders {
-				buf.WriteString(trackStmtPlaceHolder)
-				buf.WriteByte('\n')
-			}
-
-			// write user defined provider insert
-			if pos.position.IsFront() {
-				if len(frontStmts) > 0 {
-					buf.WriteString(config.TrackUserComment)
-					buf.WriteByte('\n')
-					buf.WriteString(config.TrackTipsComment)
-					buf.WriteByte('\n')
-					for _, content := range frontComments {
-						buf.WriteString(content)
-						buf.WriteByte('\n')
-					}
-					for _, content := range frontStmts {
-						buf.WriteString(content)
-						buf.WriteByte('\n')
-					}
-					buf.WriteString(config.TrackEndComment)
-					buf.WriteByte('\n')
-				}
-
-			} else {
-				if len(backStmts) > 0 {
-					buf.WriteString(config.TrackUserComment)
-					buf.WriteByte('\n')
-					buf.WriteString(config.TrackTipsComment)
-					buf.WriteByte('\n')
-					for _, content := range backComments {
-						buf.WriteString(content)
-						buf.WriteByte('\n')
-					}
-					for _, content := range backStmts {
-						buf.WriteString(content)
-						buf.WriteByte('\n')
-					}
-					buf.WriteString(config.TrackEndComment)
-					buf.WriteByte('\n')
-				}
-			}
+	deltaArray := make([]int, len(t.singleLineInsertedPositions))
+	for i := range deltaArray {
+		deltaArray[i] = -1
+	}
+	deltaArrayLength := len(deltaArray)
+	deltaIdx := -1
+	deltaLine := -1
+	if len(t.singleLineInsertedPositions) > 0 {
+		deltaIdx = 0
+		deltaLine = t.singleLineInsertedPositions[0].line - 1
+	}
+	delta := 0
+	buf.Grow(t.sourceLength + adjustLength)
+	for ; i < len(sources) && posIdx < len(t.insertedPositions); i++ {
+		if i == t.insertedPositions[posIdx].line-1 {
+			pos := t.insertedPositions[posIdx]
+			lines := doInsert(&buf, pos, t.trackStmtPlaceHolders, frontStmts, backStmts, frontComments, backComments)
+			delta += lines
 			posIdx++
+		}
+		if i == deltaLine {
+			deltaArray[deltaIdx] = delta
+			deltaIdx++
+			if deltaIdx < deltaArrayLength {
+				deltaLine = t.singleLineInsertedPositions[deltaIdx].line - 1
+			} else {
+				deltaLine = -1
+			}
+			delta = 0
 		}
 		buf.WriteString(sources[i])
 		buf.WriteByte('\n')
 	}
 	buf.WriteString(strings.Join(sources[i:], "\n"))
-	t.content = buf.Bytes()
+
+	// handle inserted statements for single line function
+	if deltaArrayLength > 0 {
+		// adjust the line number of the single line inserted statements
+		if deltaIdx < deltaArrayLength && deltaArray[deltaIdx] == -1 {
+			deltaArray[deltaIdx] = delta
+		}
+		for k := 1; k < len(deltaArray); k++ {
+			if deltaArray[k] == -1 {
+				deltaArray[k] = deltaArray[k-1]
+			} else {
+				deltaArray[k] += deltaArray[k-1]
+			}
+		}
+
+		for k := 0; k < len(deltaArray); k++ {
+			t.singleLineInsertedPositions[k].line += deltaArray[k]
+		}
+
+		newSources := strings.Split(buf.String(), "\n")
+		adjustLength = calculateInsertLength(t.singleLineInsertedPositions, t.trackStmtPlaceHolders, frontStmts, backStmts, frontComments, backComments)
+		var newBuf bytes.Buffer
+		newBuf.Grow(buf.Len() + adjustLength)
+		k := 0
+		i := 0
+		for ; i < len(newSources) && k < len(t.singleLineInsertedPositions); i++ {
+			src := newSources[i]
+			if i == t.singleLineInsertedPositions[k].line-1 {
+				// write column before
+				column := t.singleLineInsertedPositions[k].column
+				column -= 1
+				newBuf.WriteString(src[:column])
+				newBuf.WriteByte('\n')
+				// write track stmt place holders
+				_ = doInsert(&newBuf, t.singleLineInsertedPositions[k], t.trackStmtPlaceHolders, frontStmts, backStmts, frontComments, backComments)
+				// write column after
+				newBuf.WriteString(src[column:])
+				newBuf.WriteByte('\n')
+				k++
+			} else {
+				newBuf.WriteString(src)
+				newBuf.WriteByte('\n')
+			}
+		}
+		newBuf.WriteString(strings.Join(newSources[i:], "\n"))
+		t.content = newBuf.Bytes()
+	} else {
+		t.content = buf.Bytes()
+	}
 	newFset, newF, err := utils.GetAstTree("", t.content)
 	if err != nil {
 		log.Printf("get ast tree, file: %s, error: %v\n", t.fileName, err)
-		// os.WriteFile(t.fileName, t.content, 0644)
 		return nil, err
 	}
 	content, err := utils.FormatAst(t.printerConfig, newFset, newF)
@@ -176,7 +206,7 @@ func (t *IncreamentTrack) doInsert() ([]byte, error) {
 }
 
 func (t *IncreamentTrack) getContentsToInsert() (
-	frontStmts []string, backStmts []string, frontComments []string, backComments []string, insertLen int) {
+	frontStmts []string, backStmts []string, frontComments []string, backComments []string) {
 	if t.provider != nil {
 		if t.provider.FrontTrackCodeProvider() != nil {
 			frontComments = t.provider.FrontTrackCodeProvider().Comments()
@@ -185,24 +215,6 @@ func (t *IncreamentTrack) getContentsToInsert() (
 		if t.provider.BackTrackCodeProvider() != nil {
 			backComments = t.provider.BackTrackCodeProvider().Comments()
 			backStmts = t.provider.BackTrackCodeProvider().Stmts()
-		}
-	}
-
-	for _, pos := range t.positionInserts {
-		if pos.position.IsFront() {
-			for _, comment := range frontComments {
-				insertLen += len(comment) + 1
-			}
-			for _, stmt := range frontStmts {
-				insertLen += len(stmt) + 1
-			}
-		} else {
-			for _, comment := range backComments {
-				insertLen += len(comment) + 1
-			}
-			for _, stmt := range backStmts {
-				insertLen += len(stmt) + 1
-			}
 		}
 	}
 	return
@@ -299,12 +311,12 @@ func (t *IncreamentTrack) addInsert(position CodeInsertPosition, codeType CodeIn
 	// Use visitedPositionInserts map to record the inserted positions,
 	// This can prevent duplicate inserts in multiple AST scans.
 	// It is important for ensuring the correctness and avoiding unnecessary duplicate tracking.
-	key := InsertPosition{position: position, codeType: codeType, positions: line}
-	if _, ok := t.visitedPositionInserts[key]; ok {
+	key := InsertPosition{position: position, codeType: codeType, line: line}
+	if _, ok := t.visitedInsertedPositions[key]; ok {
 		return
 	}
-	t.positionInserts.Insert(position, codeType, line)
-	t.visitedPositionInserts[key] = struct{}{}
+	t.insertedPositions.Insert(position, codeType, line, 0)
+	t.visitedInsertedPositions[key] = struct{}{}
 	t.count++
 }
 
@@ -312,16 +324,24 @@ func (t *IncreamentTrack) isInFunctionScopes(line int) bool {
 	return t.functionScopes.Search(line) > 0
 }
 
+func (t *IncreamentTrack) TargetFile() string {
+	return t.fileName
+}
+
 func (t *IncreamentTrack) Track() (int, error) {
 	var err error
-	t.positionInserts.Reset()
+	t.insertedPositions.Reset()
+	t.singleLineInsertedPositions.Reset()
+	clear(t.visitedInsertedPositions)
 	_, err = t.addStmts()
 	if err != nil {
 		return 0, err
 	}
 	if t.count > 0 {
 		// do default insert
-		t.positionInserts.Reset()
+		t.insertedPositions.Reset()
+		t.singleLineInsertedPositions.Reset()
+		clear(t.visitedInsertedPositions)
 		content, err := utils.AddImport(t.printerConfig, t.importPathPlaceHolder, "", t.fileName, t.content)
 		if err != nil {
 			return 0, err
@@ -329,7 +349,9 @@ func (t *IncreamentTrack) Track() (int, error) {
 		t.content = content
 
 		// do provider insert
-		t.positionInserts.Reset()
+		t.insertedPositions.Reset()
+		t.singleLineInsertedPositions.Reset()
+		clear(t.visitedInsertedPositions)
 		pkgPath, alias := t.provider.ImportSpec()
 		content, err = utils.AddImport(t.printerConfig, pkgPath, alias, t.fileName, t.content)
 		if err != nil {
@@ -386,16 +408,25 @@ func (t *IncreamentTrack) addStmts() ([]byte, error) {
 	for _, decl := range f.Decls {
 		switch decl := decl.(type) {
 		case *ast.FuncDecl:
-			if decl.Body != nil {
+			if decl.Body == nil || len(decl.Body.List) == 0 {
+				continue
+			}
+			if fset.Position(decl.Body.Lbrace).Line == fset.Position(decl.Body.Rbrace).Line {
 				// skip single line function body
-				if fset.Position(decl.Body.Lbrace).Line == fset.Position(decl.Body.Rbrace).Line {
+				if len(decl.Body.List) == 0 {
 					continue
 				}
-				t.processStatements(decl.Body.List, fset)
-				t.processSpecialStatements(decl.Body, fset)
+				pos := fset.Position(decl.Body.List[0].Pos())
+				if t.isLineChanged(pos.Line) {
+					t.count++
+					t.singleLineInsertedPositions.Insert(CodeInsertPositionFront, CodeInsertTypeStmt, pos.Line, pos.Column)
+				}
 			}
+			t.processStatements(decl.Body.List, fset)
+			t.processSpecialStatements(decl.Body, fset)
 		case *ast.GenDecl:
 			t.processGlobalValueSpecs(decl.Specs, fset)
+			t.processGlobalFunctionLit(decl.Specs, fset)
 		}
 	}
 	return t.doInsert()
@@ -412,8 +443,40 @@ func (t *IncreamentTrack) processGlobalValueSpecs(specs []ast.Spec, fset *token.
 					}
 					switch n := n.(type) {
 					case *ast.FuncLit:
+						if n.Body == nil || len(n.Body.List) == 0 {
+							return false
+						}
+						if fset.Position(n.Body.Lbrace).Line == fset.Position(n.Body.Rbrace).Line {
+							pos := fset.Position(n.Body.List[0].Pos())
+							if t.isLineChanged(pos.Line) {
+								t.count++
+								t.singleLineInsertedPositions.Insert(CodeInsertPositionFront, CodeInsertTypeStmt, pos.Line, pos.Column)
+							}
+							return false
+						}
+						t.processStatements(n.Body.List, fset)
+						return false
+					}
+					return true
+				})
+			}
+		}
+	}
+}
+
+func (t *IncreamentTrack) processGlobalFunctionLit(specs []ast.Spec, fset *token.FileSet) {
+	for _, spec := range specs {
+		switch spec := spec.(type) {
+		case *ast.ValueSpec:
+			for _, value := range spec.Values {
+				ast.Inspect(value, func(n ast.Node) bool {
+					if n == nil {
+						return false
+					}
+					switch n := n.(type) {
+					case *ast.FuncLit:
 						if n.Body != nil {
-							t.processStatements(n.Body.List, fset)
+							t.processSpecialStatements(n.Body, fset)
 						}
 						return false
 					}
@@ -432,6 +495,9 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 		var changed bool
 		switch n := n.(type) {
 		case *ast.IfStmt:
+			if n.Body == nil {
+				break
+			}
 			// return true
 			// Judge if the if statement is changed:
 			// 1. If the if statement is changed, it means the whole if statement may be modified
@@ -451,7 +517,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Body.Lbrace).Line+1)
 				if n.Else != nil {
 					elseStmt, ok := n.Else.(*ast.BlockStmt)
-					if ok {
+					if ok && len(elseStmt.List) > 0 {
 						t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt,
 							fset.Position(elseStmt.Lbrace).Line+1)
 					}
@@ -533,6 +599,9 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Colon).Line+1)
 			}
 		case *ast.RangeStmt:
+			if n.Body == nil {
+				break
+			}
 			// return true
 			// Judge if the range statement is changed:
 			// 1. If the range statement is changed, it means the whole range statement may be modified
@@ -556,6 +625,9 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Body.Lbrace).Line+1)
 			}
 		case *ast.ForStmt:
+			if n.Body == nil {
+				break
+			}
 			// Judge if the for statement is changed:
 			// 1. If the for statement is changed, it means the whole for statement may be modified
 			// 2. Even if the Init and Assign parts are not changed, the change of the for statement may affect the whole statement structure
@@ -670,13 +742,19 @@ func (t *IncreamentTrack) analyzeAndModifyExpr(exprList []ast.Expr, fset *token.
 		}
 		switch expr := expr.(type) {
 		case *ast.FuncLit:
-			// skip function literal which is single line statement
-			if fset.Position(expr.Pos()).Line == fset.Position(expr.End()).Line {
+			if expr.Body == nil || len(expr.Body.List) == 0 {
 				continue
 			}
-			if expr.Body != nil {
-				t.processStatements(expr.Body.List, fset)
+			// Handle single line function
+			if fset.Position(expr.Pos()).Line == fset.Position(expr.End()).Line {
+				pos := fset.Position(expr.Body.List[0].Pos())
+				if t.isLineChanged(pos.Line) {
+					t.count++
+					t.singleLineInsertedPositions.Insert(CodeInsertPositionFront, CodeInsertTypeStmt, pos.Line, pos.Column)
+				}
+				continue
 			}
+			t.processStatements(expr.Body.List, fset)
 		case *ast.CallExpr:
 			if expr.Fun != nil {
 				t.analyzeAndModifyExpr([]ast.Expr{expr.Fun}, fset)
@@ -709,6 +787,90 @@ func (t *IncreamentTrack) analyzeAndModifyExpr(exprList []ast.Expr, fset *token.
 		default:
 		}
 	}
+}
+
+func calculateInsertLength(insertedPositions InsertPositions, defaultInserts []string, frontStmts []string,
+	backStmts []string, frontComments []string, backComments []string) int {
+	insertLen := 0
+	for _, pos := range insertedPositions {
+
+		for _, stmt := range defaultInserts {
+			insertLen += len(stmt) + 1
+		}
+		if pos.position.IsFront() {
+			for _, comment := range frontComments {
+				insertLen += len(comment) + 1
+			}
+			for _, stmt := range frontStmts {
+				insertLen += len(stmt) + 1
+			}
+		} else {
+			for _, comment := range backComments {
+				insertLen += len(comment) + 1
+			}
+			for _, stmt := range backStmts {
+				insertLen += len(stmt) + 1
+			}
+		}
+	}
+	return insertLen
+}
+
+func doInsert(buf *bytes.Buffer, pos InsertPosition, trackStmtPlaceHolders []string,
+	frontStmts []string, backStmts []string, frontComments []string, backComments []string) int {
+	// write default track stmt place holders
+	lines := 0
+	for _, trackStmtPlaceHolder := range trackStmtPlaceHolders {
+		buf.WriteString(trackStmtPlaceHolder)
+		buf.WriteByte('\n')
+		lines++
+	}
+	// write user defined provider insert
+	if pos.position.IsFront() {
+		if len(frontStmts) > 0 {
+			buf.WriteString(config.TrackUserComment)
+			buf.WriteByte('\n')
+			buf.WriteString(config.TrackTipsComment)
+			buf.WriteByte('\n')
+			lines += 2
+			for _, content := range frontComments {
+				buf.WriteString(content)
+				buf.WriteByte('\n')
+				lines++
+			}
+			for _, content := range frontStmts {
+				buf.WriteString(content)
+				buf.WriteByte('\n')
+				lines++
+			}
+			buf.WriteString(config.TrackEndComment)
+			buf.WriteByte('\n')
+			lines++
+		}
+
+	} else {
+		if len(backStmts) > 0 {
+			buf.WriteString(config.TrackUserComment)
+			buf.WriteByte('\n')
+			buf.WriteString(config.TrackTipsComment)
+			buf.WriteByte('\n')
+			lines += 2
+			for _, content := range backComments {
+				buf.WriteString(content)
+				buf.WriteByte('\n')
+				lines++
+			}
+			for _, content := range backStmts {
+				buf.WriteString(content)
+				buf.WriteByte('\n')
+				lines++
+			}
+			buf.WriteString(config.TrackEndComment)
+			buf.WriteByte('\n')
+			lines++
+		}
+	}
+	return lines
 }
 
 // --- Interface Implementations ---
