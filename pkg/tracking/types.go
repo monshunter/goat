@@ -162,7 +162,24 @@ func (b BlockScopes) Sort() {
 	})
 }
 
-func (b BlockScopes) Search(line int) int {
+// SearchErr uses binary search which may miss nested scopes since it only returns
+// the first matching scope it finds. The linear search in Search checks all scopes
+// and finds the innermost (most nested) scope by continuing to search after finding
+// a match. Binary search stops after finding any match.
+//
+// For example, with scopes:
+// 1. {1, 100}
+// 2. {10, 20}
+// 3. {15, 18}
+//
+// Searching line 16:
+// - SearchErr may return scope 1 or 2 depending on search order
+// - Search will always return scope 3 (most nested)
+//
+// Binary search is faster but doesn't handle nested scopes well.
+// Linear search is slower but more accurate for nested cases.
+// Search call after Sort
+func (b BlockScopes) SearchWrongImplement(line int) int {
 	// find lastest scope of the line
 	l, r := 0, len(b)-1
 	idx := 0
@@ -175,6 +192,18 @@ func (b BlockScopes) Search(line int) int {
 			l = mid + 1
 		} else {
 			r = mid - 1
+		}
+	}
+	return idx
+}
+
+// Search call after Sort
+func (b BlockScopes) Search(line int) int {
+	// find lastest scope of the line
+	idx := 0
+	for i, scope := range b {
+		if scope.StartLine < line && scope.EndLine > line {
+			idx = i
 		}
 	}
 	return idx
@@ -196,14 +225,14 @@ func BlockScopesOfGoAST(filename string, content []byte) (BlockScopes, error) {
 	})
 	for _, decl := range astFile.Decls {
 		if declFunc, ok := decl.(*ast.FuncDecl); ok {
-			blockScopes = append(blockScopes, BlockScope{
-				StartLine: fset.Position(declFunc.Pos()).Line,
-				EndLine:   fset.Position(declFunc.End()).Line,
-			})
-
 			if declFunc.Body == nil {
 				continue
 			}
+			blockScopes = append(blockScopes, BlockScope{
+				StartLine: fset.Position(declFunc.Body.Lbrace).Line,
+				EndLine:   fset.Position(declFunc.Body.Rbrace).Line,
+			})
+
 			// Traverse the statements in the function body
 			for _, stmt := range declFunc.Body.List {
 				ast.Inspect(stmt, func(node ast.Node) bool {
@@ -212,30 +241,38 @@ func BlockScopesOfGoAST(filename string, content []byte) (BlockScopes, error) {
 					}
 					switch stmt := node.(type) {
 					case *ast.IfStmt:
-						blockScopes = append(blockScopes, BlockScope{
-							StartLine: fset.Position(stmt.Pos()).Line,
-							EndLine:   fset.Position(stmt.End()).Line,
-						})
-						if stmt.Else != nil {
-							switch stmt.Else.(type) {
-							case *ast.BlockStmt:
-								block := stmt.Else.(*ast.BlockStmt)
-								blockScopes = append(blockScopes, BlockScope{
-									StartLine: fset.Position(block.Pos()).Line,
-									EndLine:   fset.Position(block.End()).Line,
-								})
+						if stmt.Body != nil {
+							blockScopes = append(blockScopes, BlockScope{
+								StartLine: fset.Position(stmt.Body.Lbrace).Line,
+								EndLine:   fset.Position(stmt.Body.Rbrace).Line,
+							})
+							if stmt.Else != nil {
+								switch stmt.Else.(type) {
+								case *ast.BlockStmt:
+									block := stmt.Else.(*ast.BlockStmt)
+									blockScopes = append(blockScopes, BlockScope{
+										StartLine: fset.Position(block.Lbrace).Line,
+										EndLine:   fset.Position(block.Rbrace).Line,
+									})
+								}
 							}
 						}
+
 					case *ast.ForStmt:
-						blockScopes = append(blockScopes, BlockScope{
-							StartLine: fset.Position(stmt.Pos()).Line,
-							EndLine:   fset.Position(stmt.End()).Line,
-						})
+						if stmt.Body != nil {
+							blockScopes = append(blockScopes, BlockScope{
+								StartLine: fset.Position(stmt.Body.Lbrace).Line,
+								EndLine:   fset.Position(stmt.Body.Rbrace).Line,
+							})
+						}
 					case *ast.RangeStmt:
-						blockScopes = append(blockScopes, BlockScope{
-							StartLine: fset.Position(stmt.Pos()).Line,
-							EndLine:   fset.Position(stmt.End()).Line,
-						})
+						if stmt.Body != nil {
+							blockScopes = append(blockScopes, BlockScope{
+								StartLine: fset.Position(stmt.Body.Lbrace).Line,
+								EndLine:   fset.Position(stmt.Body.Rbrace).Line,
+							})
+						}
+
 					case *ast.CaseClause:
 						if stmt.Body != nil {
 							blockScopes = append(blockScopes, BlockScope{
@@ -252,10 +289,12 @@ func BlockScopesOfGoAST(filename string, content []byte) (BlockScopes, error) {
 							})
 						}
 					case *ast.FuncLit:
-						blockScopes = append(blockScopes, BlockScope{
-							StartLine: fset.Position(stmt.Pos()).Line,
-							EndLine:   fset.Position(stmt.End()).Line,
-						})
+						if stmt.Body != nil {
+							blockScopes = append(blockScopes, BlockScope{
+								StartLine: fset.Position(stmt.Body.Lbrace).Line,
+								EndLine:   fset.Position(stmt.Body.Rbrace).Line,
+							})
+						}
 					}
 					return true
 				})
@@ -288,10 +327,32 @@ func FunctionScopesOfGoAST(filename string, content []byte) (BlockScopes, error)
 	for _, decl := range astFile.Decls {
 		switch decl := decl.(type) {
 		case *ast.FuncDecl:
+			if decl.Body == nil {
+				continue
+			}
+
 			blockScopes = append(blockScopes, BlockScope{
-				StartLine: fset.Position(decl.Pos()).Line,
-				EndLine:   fset.Position(decl.End()).Line,
+				StartLine: fset.Position(decl.Body.Lbrace).Line,
+				EndLine:   fset.Position(decl.Body.Rbrace).Line,
 			})
+			for _, stmt := range decl.Body.List {
+				ast.Inspect(stmt, func(node ast.Node) bool {
+					if node == nil {
+						return false
+					}
+					switch n := node.(type) {
+					case *ast.FuncLit:
+						if n.Body == nil {
+							return false
+						}
+						blockScopes = append(blockScopes, BlockScope{
+							StartLine: fset.Position(n.Body.Lbrace).Line,
+							EndLine:   fset.Position(n.Body.Rbrace).Line,
+						})
+					}
+					return true
+				})
+			}
 		case *ast.GenDecl:
 			if len(decl.Specs) == 0 {
 				continue
@@ -305,9 +366,12 @@ func FunctionScopesOfGoAST(filename string, content []byte) (BlockScopes, error)
 						}
 						switch n := node.(type) {
 						case *ast.FuncLit:
+							if n.Body != nil {
+								return false
+							}
 							blockScopes = append(blockScopes, BlockScope{
-								StartLine: fset.Position(n.Pos()).Line,
-								EndLine:   fset.Position(n.End()).Line,
+								StartLine: fset.Position(n.Body.Lbrace).Line,
+								EndLine:   fset.Position(n.Body.Rbrace).Line,
 							})
 						}
 						return true

@@ -298,6 +298,14 @@ func (t *IncreamentTrack) isLineChangedRange(start, end int) bool {
 
 func (t *IncreamentTrack) addInsert(position CodeInsertPosition, codeType CodeInsertType, line int) {
 
+	if t.granularity.IsFunc() {
+		var valid bool
+		line, valid = t.getInsertPositionInFunctionBody(line)
+		if !valid {
+			return
+		}
+	}
+
 	for utils.IsGoComment(t.source[line-1]) {
 		line++
 	}
@@ -322,6 +330,14 @@ func (t *IncreamentTrack) addInsert(position CodeInsertPosition, codeType CodeIn
 
 func (t *IncreamentTrack) isInFunctionScopes(line int) bool {
 	return t.functionScopes.Search(line) > 0
+}
+
+func (t *IncreamentTrack) getInsertPositionInFunctionBody(line int) (insertLine int, valid bool) {
+	idx := t.functionScopes.Search(line)
+	if idx == 0 {
+		return -1, false
+	}
+	return t.functionScopes[idx].StartLine + 1, true
 }
 
 func (t *IncreamentTrack) TargetFile() string {
@@ -417,10 +433,7 @@ func (t *IncreamentTrack) addStmts() ([]byte, error) {
 					continue
 				}
 				pos := fset.Position(decl.Body.List[0].Pos())
-				if t.isLineChanged(pos.Line) {
-					t.count++
-					t.singleLineInsertedPositions.Insert(CodeInsertPositionFront, CodeInsertTypeStmt, pos.Line, pos.Column)
-				}
+				t.insertSingleLineStmt(pos, CodeInsertTypeStmt, CodeInsertPositionFront)
 			}
 			t.processStatements(decl.Body.List, fset)
 			t.processSpecialStatements(decl.Body, fset)
@@ -448,10 +461,7 @@ func (t *IncreamentTrack) processGlobalValueSpecs(specs []ast.Spec, fset *token.
 						}
 						if fset.Position(n.Body.Lbrace).Line == fset.Position(n.Body.Rbrace).Line {
 							pos := fset.Position(n.Body.List[0].Pos())
-							if t.isLineChanged(pos.Line) {
-								t.count++
-								t.singleLineInsertedPositions.Insert(CodeInsertPositionFront, CodeInsertTypeStmt, pos.Line, pos.Column)
-							}
+							t.insertSingleLineStmt(pos, CodeInsertTypeStmt, CodeInsertPositionFront)
 							return false
 						}
 						t.processStatements(n.Body.List, fset)
@@ -748,10 +758,7 @@ func (t *IncreamentTrack) analyzeAndModifyExpr(exprList []ast.Expr, fset *token.
 			// Handle single line function
 			if fset.Position(expr.Pos()).Line == fset.Position(expr.End()).Line {
 				pos := fset.Position(expr.Body.List[0].Pos())
-				if t.isLineChanged(pos.Line) {
-					t.count++
-					t.singleLineInsertedPositions.Insert(CodeInsertPositionFront, CodeInsertTypeStmt, pos.Line, pos.Column)
-				}
+				t.insertSingleLineStmt(pos, CodeInsertTypeStmt, CodeInsertPositionFront)
 				continue
 			}
 			t.processStatements(expr.Body.List, fset)
@@ -786,6 +793,13 @@ func (t *IncreamentTrack) analyzeAndModifyExpr(exprList []ast.Expr, fset *token.
 			}
 		default:
 		}
+	}
+}
+
+func (t *IncreamentTrack) insertSingleLineStmt(pos token.Position, codeType CodeInsertType, position CodeInsertPosition) {
+	if t.isLineChanged(pos.Line) {
+		t.count++
+		t.singleLineInsertedPositions.Insert(position, codeType, pos.Line, pos.Column)
 	}
 }
 
