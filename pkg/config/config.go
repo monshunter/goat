@@ -440,11 +440,11 @@ func GoModuleName() string {
 	modFilePath := "go.mod"
 	content, err := os.ReadFile(modFilePath)
 	if err != nil {
-		return ""
+		panic(fmt.Sprintf("failed to read go.mod file: %v", err))
 	}
 	modFile, err := modfile.Parse(modFilePath, content, nil)
 	if err != nil {
-		return ""
+		panic(fmt.Sprintf("failed to parse go.mod file: %v", err))
 	}
 	return modFile.Module.Mod.Path
 }

@@ -56,7 +56,7 @@ func (f *FixExecutor) Run() error {
 }
 
 func (f *FixExecutor) initMainPackageInfos() error {
-	mainPkgInfos, err := getMainPackageInfos(".", f.goModule)
+	mainPkgInfos, err := getMainPackageInfos(".", f.goModule, f.cfg.Ignores)
 	if err != nil {
 		return err
 	}

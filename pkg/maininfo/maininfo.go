@@ -66,12 +66,12 @@ type MainInfo struct {
 }
 
 // NewMainInfo creates a new MainInfo instance
-func NewMainInfo(projectRoot string, goModule string) (*MainInfo, error) {
+func NewMainInfo(projectRoot string, goModule string, ignores []string) (*MainInfo, error) {
 	mainInfo := &MainInfo{
 		ProjectRoot: projectRoot,
 		Module:      goModule,
 	}
-	mainPackageInfos, err := mainInfo.analyzeMainPackages()
+	mainPackageInfos, err := mainInfo.analyzeMainPackages(ignores)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func NewMainInfo(projectRoot string, goModule string) (*MainInfo, error) {
 }
 
 // analyzeMainPackages analyzes all main packages
-func (m *MainInfo) analyzeMainPackages() ([]MainPackageInfo, error) {
+func (m *MainInfo) analyzeMainPackages(ignores []string) ([]MainPackageInfo, error) {
 	// find all Go files
 	var goFiles []string
 	err := filepath.Walk(m.ProjectRoot, func(path string, info os.FileInfo, err error) error {
@@ -93,17 +93,16 @@ func (m *MainInfo) analyzeMainPackages() ([]MainPackageInfo, error) {
 			return err
 		}
 		if info.IsDir() {
-			base := filepath.Base(path)
-			if base == "vendor" || base == "testdata" || base == ".git" ||
-				base == "node_modules" || base == ".cursor" || base == ".vscode" {
+			if !utils.IsTargetDir(path, ignores) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 
-		if !info.IsDir() && strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
-			goFiles = append(goFiles, path)
+		if !utils.IsTargetFile(path, ignores) {
+			return nil
 		}
+		goFiles = append(goFiles, path)
 		return nil
 	})
 	if err != nil {

@@ -94,7 +94,7 @@ func (p *PatchExecutor) initChanges() error {
 
 // initMainPackageInfos initializes the main package infos
 func (p *PatchExecutor) initMainPackageInfos() error {
-	mainPkgInfos, err := getMainPackageInfos(".", p.goModule)
+	mainPkgInfos, err := getMainPackageInfos(".", p.goModule, p.cfg.Ignores)
 	if err != nil {
 		return err
 	}

@@ -148,8 +148,8 @@ func getTotalTrackIdxs(fileTrackIdStartMap map[string]trackIdxInterval) []int {
 }
 
 // getMainPackageInfos gets the main package infos
-func getMainPackageInfos(projectRoot string, goModule string) ([]maininfo.MainPackageInfo, error) {
-	mainPkgInfo, err := maininfo.NewMainInfo(projectRoot, goModule)
+func getMainPackageInfos(projectRoot string, goModule string, ignores []string) ([]maininfo.MainPackageInfo, error) {
+	mainPkgInfo, err := maininfo.NewMainInfo(projectRoot, goModule, ignores)
 	if err != nil {
 		log.Printf("failed to get main info: %v", err)
 		return nil, err
