@@ -244,7 +244,7 @@ func Example() {
 }
 	`)
 
-	scopes, err := BlockScopesOfGoAST("example.go", content)
+	scopes, err := BlockScopesOfAST("example.go", content)
 	if err != nil {
 		t.Fatalf("Failed to get block scopes: %v", err)
 	}
@@ -279,7 +279,7 @@ var y = func() {
 }
 	`)
 
-	scopes, err := FunctionScopesOfGoAST("example.go", content)
+	scopes, err := FunctionScopesOfAST("example.go", content)
 	if err != nil {
 		t.Fatalf("Failed to get function scopes: %v", err)
 	}

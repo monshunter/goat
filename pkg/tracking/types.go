@@ -209,8 +209,8 @@ func (b BlockScopes) Search(line int) int {
 	return idx
 }
 
-// BlockScopesOfGoAST returns the block scopes of the go ast
-func BlockScopesOfGoAST(filename string, content []byte) (BlockScopes, error) {
+// BlockScopesOfAST returns the block scopes of the ast
+func BlockScopesOfAST(filename string, content []byte) (BlockScopes, error) {
 
 	fset := token.NewFileSet()
 	blockScopes := BlockScopes{}
@@ -305,81 +305,364 @@ func BlockScopesOfGoAST(filename string, content []byte) (BlockScopes, error) {
 	return blockScopes, nil
 }
 
-// FunctionScopesOfGoAST returns the function scopes of the go ast
-func FunctionScopesOfGoAST(filename string, content []byte) (BlockScopes, error) {
-
+// FunctionScopesOfAST returns the function scopes of the ast
+func FunctionScopesOfAST(filename string, content []byte) (BlockScopes, error) {
 	fset := token.NewFileSet()
-	blockScopes := BlockScopes{}
 	astFile, err := parser.ParseFile(fset, filename, content, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
+	nodes, err := functionNodesOfAST(astFile)
+	if err != nil {
+		return nil, err
+	}
 
-	lines := strings.Split(string(content), "\n")
-	// Add this scope to make the whole file as a function scope
-	// This can make the search function works
-	// But index 0 is not a function scope
-	blockScopes = append(blockScopes, BlockScope{
-		StartLine: 1,
-		EndLine:   len(lines),
-	})
-
-	for _, decl := range astFile.Decls {
-		switch decl := decl.(type) {
+	blockScopes := BlockScopes{}
+	for _, node := range nodes {
+		switch n := node.(type) {
 		case *ast.FuncDecl:
-			if decl.Body == nil {
-				continue
-			}
-
 			blockScopes = append(blockScopes, BlockScope{
-				StartLine: fset.Position(decl.Body.Lbrace).Line,
-				EndLine:   fset.Position(decl.Body.Rbrace).Line,
+				StartLine: fset.Position(n.Body.Lbrace).Line,
+				EndLine:   fset.Position(n.Body.Rbrace).Line,
 			})
-			for _, stmt := range decl.Body.List {
-				ast.Inspect(stmt, func(node ast.Node) bool {
-					if node == nil {
-						return false
-					}
-					switch n := node.(type) {
-					case *ast.FuncLit:
-						if n.Body == nil {
-							return false
-						}
-						blockScopes = append(blockScopes, BlockScope{
-							StartLine: fset.Position(n.Body.Lbrace).Line,
-							EndLine:   fset.Position(n.Body.Rbrace).Line,
-						})
-					}
-					return true
-				})
-			}
-		case *ast.GenDecl:
-			if len(decl.Specs) == 0 {
-				continue
-			}
-			for _, spec := range decl.Specs {
-				switch spec := spec.(type) {
-				case *ast.ValueSpec:
-					ast.Inspect(spec, func(node ast.Node) bool {
-						if node == nil {
-							return false
-						}
-						switch n := node.(type) {
-						case *ast.FuncLit:
-							if n.Body != nil {
-								return false
-							}
-							blockScopes = append(blockScopes, BlockScope{
-								StartLine: fset.Position(n.Body.Lbrace).Line,
-								EndLine:   fset.Position(n.Body.Rbrace).Line,
-							})
-						}
-						return true
-					})
-				}
-			}
+		case *ast.FuncLit:
+			blockScopes = append(blockScopes, BlockScope{
+				StartLine: fset.Position(n.Body.Lbrace).Line,
+				EndLine:   fset.Position(n.Body.Rbrace).Line,
+			})
+		case *ast.File:
+			blockScopes = append(blockScopes, BlockScope{
+				StartLine: fset.Position(n.Pos()).Line,
+				EndLine:   fset.Position(n.End()).Line,
+			})
 		}
 	}
 	blockScopes.Sort()
 	return blockScopes, nil
+}
+
+// TrackScopes is a list of track scopes
+type TrackScopes []TrackScope
+
+// Sort sorts the track scopes by start line
+func (t TrackScopes) Sort() {
+	slices.SortFunc(t, func(a, b TrackScope) int {
+		if a.StartLine == b.StartLine {
+			return a.EndLine - b.EndLine
+		}
+		return a.StartLine - b.StartLine
+	})
+}
+
+// Search returns the index of the track scope that contains the line
+// Call after Sort, so the idx is the latest track scope that contains the line
+func (t TrackScopes) Search(line int) int {
+	idx := -1
+	for i, trackScope := range t {
+		if trackScope.Contains(line) {
+			idx = i
+		}
+	}
+	return idx
+}
+
+// Print prints the track scopes
+func (t TrackScopes) Print() {
+	fmt.Println("==============TrackScopes==============")
+	for i, trackScope := range t {
+		fmt.Println()
+		fmt.Printf("==========track scope %d start==========\n", i)
+		trackScope.Print()
+		fmt.Printf("===========track scope %d end===========\n", i)
+		fmt.Println()
+	}
+	fmt.Println("========================================")
+}
+
+// TrackScope is a scope of a function
+// [StartLine, EndLine] is the range of the scope
+type TrackScope struct {
+	StartLine int
+	EndLine   int
+	node      *ast.BlockStmt
+	Children  TrackScopes
+}
+
+// NewTrackScope creates a new track scope
+func NewTrackScope(startLine int, endLine int, node *ast.BlockStmt) *TrackScope {
+	return &TrackScope{
+		StartLine: startLine,
+		EndLine:   endLine,
+		node:      node,
+	}
+}
+
+func (f *TrackScope) AddChild(child TrackScope) {
+	f.Children = append(f.Children, child)
+}
+
+// String returns the string representation of the track scope
+func (f *TrackScope) String() string {
+	return fmt.Sprintf("TrackScope{StartLine: %d, EndLine: %d}", f.StartLine, f.EndLine)
+}
+
+// IsEmpty checks if the track scope is empty
+func (f *TrackScope) IsEmpty() bool {
+	return f.StartLine == 0 && f.EndLine == 0
+}
+
+// IsValid checks if the track scope is valid
+func (f *TrackScope) IsValid() bool {
+	return f.StartLine < f.EndLine
+}
+
+// Contains checks if the track scope contains the line
+func (f *TrackScope) Contains(line int) bool {
+	return line > f.StartLine && line < f.EndLine
+}
+
+// ContainsRange checks if the track scope contains the range
+func (f *TrackScope) ContainsRange(start, end int) bool {
+	return start > f.StartLine && end < f.EndLine
+}
+
+// IsLeaf checks if the track scope is a leaf
+func (f *TrackScope) IsLeaf() bool {
+	return len(f.Children) == 0
+}
+
+// Search searches the track scope that contains the line
+func (f *TrackScope) Search(line int) *TrackScope {
+	for _, child := range f.Children {
+		if child.Contains(line) {
+			return child.Search(line)
+		}
+	}
+	return f
+}
+
+// PrepareChildren prepares the children of the track scope
+func (f *TrackScope) PrepareChildren(fset *token.FileSet) error {
+	if f.node == nil {
+		return nil
+	}
+	blockNodes, err := blockNodesOfFunction(f.node.List)
+	if err != nil {
+		return err
+	}
+	for _, blockNode := range blockNodes {
+		if blockNode == nil {
+			continue
+		}
+		switch block := blockNode.(type) {
+		case *ast.IfStmt:
+			if block.Body != nil {
+				f.AddChild(TrackScope{
+					StartLine: fset.Position(block.Body.Lbrace).Line,
+					EndLine:   fset.Position(block.Body.Rbrace).Line,
+					node:      block.Body,
+				})
+			}
+
+		case *ast.ForStmt:
+			if block.Body != nil {
+				f.AddChild(TrackScope{
+					StartLine: fset.Position(block.Body.Lbrace).Line,
+					EndLine:   fset.Position(block.Body.Rbrace).Line,
+					node:      block.Body,
+				})
+			}
+		case *ast.RangeStmt:
+			if block.Body != nil {
+				f.AddChild(TrackScope{
+					StartLine: fset.Position(block.Body.Lbrace).Line,
+					EndLine:   fset.Position(block.Body.Rbrace).Line,
+					node:      block.Body,
+				})
+			}
+		case *ast.CaseClause:
+			if len(block.Body) > 0 {
+				f.AddChild(TrackScope{
+					StartLine: fset.Position(block.Body[0].Pos()).Line - 1,
+					EndLine:   fset.Position(block.Body[len(block.Body)-1].End()).Line + 1,
+					node:      &ast.BlockStmt{List: block.Body},
+				})
+			}
+		case *ast.CommClause:
+			if len(block.Body) > 0 {
+				f.AddChild(TrackScope{
+					StartLine: fset.Position(block.Body[0].Pos()).Line - 1,
+					EndLine:   fset.Position(block.Body[len(block.Body)-1].End()).Line + 1,
+					node:      &ast.BlockStmt{List: block.Body},
+				})
+			}
+
+		}
+	}
+	f.Children.Sort()
+
+	for i := range f.Children {
+		child := &f.Children[i]
+		err := child.PrepareChildren(fset)
+		if err != nil {
+			return err
+		}
+	}
+	children := []TrackScope{}
+	if len(f.Children) > 0 {
+		if f.StartLine < f.Children[0].StartLine {
+			children = append(children, TrackScope{
+				StartLine: f.StartLine,
+				EndLine:   f.Children[0].StartLine,
+				node:      nil,
+			})
+		}
+		// fill the gap between children
+		// for i < j, if children[i].EndLine < children[j].StartLine, then
+		// fill a new child that child.startLine is children[i].EndLine
+		// and child.EndLine is children[j].StartLine
+		k := 0
+		for i := range len(f.Children) {
+			child := f.Children[i]
+			if children[k].EndLine < child.StartLine {
+				children = append(children, TrackScope{
+					StartLine: children[k].EndLine,
+					EndLine:   child.StartLine,
+					node:      nil,
+				})
+				k++
+			}
+			children = append(children, child)
+			k++
+		}
+
+		if f.EndLine > f.Children[len(f.Children)-1].EndLine {
+			children = append(children, TrackScope{
+				StartLine: f.Children[len(f.Children)-1].EndLine,
+				EndLine:   f.EndLine,
+				node:      nil,
+			})
+		}
+	}
+	f.Children = children
+	return nil
+}
+
+func (f *TrackScope) Print() {
+	fmt.Println(f.String())
+	fmt.Printf("-----traverse children start: len(%d)----\n", len(f.Children))
+	for _, child := range f.Children {
+		child.Print()
+	}
+	fmt.Printf("-----traverse children end: len(%d)------\n", len(f.Children))
+}
+
+// TrackScopesOfAST returns the track scopes of the ast
+func TrackScopesOfAST(filename string, content []byte) (TrackScopes, error) {
+
+	// find all the function scopes
+	fset := token.NewFileSet()
+	astFile, err := parser.ParseFile(fset, filename, content, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+	// find all function scopes
+	trackScopes, err := functionTrackScopes(fset, astFile)
+	if err != nil {
+		return nil, err
+	}
+	// find all the block scopes
+	for i := range trackScopes {
+		trackScope := &trackScopes[i]
+		err := trackScope.PrepareChildren(fset)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return trackScopes, nil
+}
+
+// functionTrackScopes returns the track scopes of the function
+func functionTrackScopes(fset *token.FileSet, astFile *ast.File) (TrackScopes, error) {
+	trackScopes := TrackScopes{}
+	nodes, err := functionNodesOfAST(astFile)
+	if err != nil {
+		return nil, err
+	}
+	for _, node := range nodes {
+		switch n := node.(type) {
+		case *ast.FuncDecl:
+			trackScopes = append(trackScopes, TrackScope{
+				StartLine: fset.Position(n.Body.Lbrace).Line,
+				EndLine:   fset.Position(n.Body.Rbrace).Line,
+				node:      n.Body,
+			})
+		case *ast.FuncLit:
+			trackScopes = append(trackScopes, TrackScope{
+				StartLine: fset.Position(n.Body.Lbrace).Line,
+				EndLine:   fset.Position(n.Body.Rbrace).Line,
+				node:      n.Body,
+			})
+		}
+	}
+	trackScopes.Sort()
+	return trackScopes, nil
+}
+
+// functionNodesOfAST returns the nodes of the function
+func functionNodesOfAST(astFile *ast.File) ([]ast.Node, error) {
+	nodes := []ast.Node{}
+	nodes = append(nodes, astFile)
+	ast.Inspect(astFile, func(node ast.Node) bool {
+		if node == nil {
+			return false
+		}
+		switch n := node.(type) {
+		case *ast.FuncDecl:
+			nodes = append(nodes, n)
+		case *ast.FuncLit:
+			nodes = append(nodes, n)
+		}
+		return true
+	})
+	return nodes, nil
+}
+
+// blockNodesOfFunction returns the nodes of the function
+func blockNodesOfFunction(stmts []ast.Stmt) ([]ast.Stmt, error) {
+	blockNodes := []ast.Stmt{}
+	for _, stmt := range stmts {
+		if stmt == nil {
+			continue
+		}
+		switch stmt := stmt.(type) {
+		case *ast.IfStmt:
+			blockNodes = append(blockNodes, stmt)
+			var elseStmt ast.Stmt
+			elseStmt = stmt.Else
+			for elseStmt != nil {
+				switch s := elseStmt.(type) {
+				case *ast.BlockStmt:
+					blockNodes = append(blockNodes, &ast.IfStmt{
+						Body: s,
+					})
+					elseStmt = nil
+				case *ast.IfStmt:
+					blockNodes = append(blockNodes, s)
+					elseStmt = s.Else
+				}
+			}
+		case *ast.ForStmt:
+			blockNodes = append(blockNodes, stmt)
+		case *ast.RangeStmt:
+			blockNodes = append(blockNodes, stmt)
+		case *ast.CaseClause:
+			blockNodes = append(blockNodes, stmt)
+		case *ast.CommClause:
+			blockNodes = append(blockNodes, stmt)
+		case *ast.LabeledStmt:
+			blockNodes = append(blockNodes, stmt.Stmt)
+		}
+	}
+	return blockNodes, nil
 }

@@ -59,12 +59,14 @@ const (
 	_ Granularity = iota
 	GranularityLine
 	GranularityBlock
+	GranularityScope
 	GranularityFunc
 )
 
 const (
 	GranularityLineStr  = "line"
 	GranularityBlockStr = "block"
+	GranularityScopeStr = "scope"
 	GranularityFuncStr  = "func"
 )
 
@@ -121,6 +123,8 @@ func ToGranularity(s string) (Granularity, error) {
 		return GranularityBlock, nil
 	case GranularityFuncStr:
 		return GranularityFunc, nil
+	case GranularityScopeStr:
+		return GranularityScope, nil
 	default:
 		return 0, fmt.Errorf("invalid granularity: %s", s)
 	}
@@ -128,12 +132,17 @@ func ToGranularity(s string) (Granularity, error) {
 
 // IsValid checks if the granularity is valid
 func (g Granularity) IsValid() bool {
-	return g == GranularityLine || g == GranularityBlock || g == GranularityFunc
+	switch g {
+	case GranularityLine, GranularityBlock, GranularityFunc, GranularityScope:
+		return true
+	default:
+		return false
+	}
 }
 
 // String returns the string representation of the granularity
 func (g Granularity) String() string {
-	return []string{GranularityLineStr, GranularityBlockStr, GranularityFuncStr}[g-1]
+	return []string{GranularityLineStr, GranularityBlockStr, GranularityFuncStr, GranularityScopeStr}[g-1]
 }
 
 // Int returns the integer representation of the granularity
@@ -154,6 +163,11 @@ func (g Granularity) IsBlock() bool {
 // IsFunc checks if the granularity is func
 func (g Granularity) IsFunc() bool {
 	return g == GranularityFunc
+}
+
+// IsScope checks if the granularity is scope
+func (g Granularity) IsScope() bool {
+	return g == GranularityScope
 }
 
 // DataType is the type of the data
@@ -231,7 +245,7 @@ type Config struct {
 	// Goat package path
 	GoatPackagePath string `yaml:"goatPackagePath"`
 	// Granularity
-	Granularity string `yaml:"granularity"` // line, block, func
+	Granularity string `yaml:"granularity"` // line, block, scope, func
 	// Diff precision
 	DiffPrecision int `yaml:"diffPrecision"` // 1~2, 3&4 is not supported
 	// Threads

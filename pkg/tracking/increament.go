@@ -36,6 +36,12 @@ type IncreamentTrack struct {
 	blockScopes                 BlockScopes
 	functionScopes              BlockScopes
 	printerConfig               *printer.Config
+	trackScopes                 TrackScopes
+	visitedTrackScopes          map[TrackScopeKey]struct{}
+}
+
+type TrackScopeKey struct {
+	StartLine, EndLine int
 }
 
 func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
@@ -62,16 +68,22 @@ func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
 		return nil, err
 	}
 
-	blockScopes, err := BlockScopesOfGoAST(fileName, content)
+	blockScopes, err := BlockScopesOfAST(fileName, content)
 	if err != nil {
 		return nil, err
 	}
-	functionScopes, err := FunctionScopesOfGoAST(fileName, content)
+	functionScopes, err := FunctionScopesOfAST(fileName, content)
+	if err != nil {
+		return nil, err
+	}
+
+	trackScopes, err := TrackScopesOfAST(fileName, content)
 	if err != nil {
 		return nil, err
 	}
 
 	log.Println("start tracking file:", fileName)
+
 	return &IncreamentTrack{
 		basePath:                    basePath,
 		fileChange:                  fileChange,
@@ -89,6 +101,8 @@ func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
 		functionScopes:              functionScopes,
 		visitedInsertedPositions:    make(map[InsertPosition]struct{}),
 		printerConfig:               printerConfig,
+		trackScopes:                 trackScopes,
+		visitedTrackScopes:          make(map[TrackScopeKey]struct{}),
 	}, nil
 }
 
@@ -220,29 +234,52 @@ func (t *IncreamentTrack) getContentsToInsert() (
 	return
 }
 
-func (t *IncreamentTrack) checkAndInsert(position CodeInsertPosition, line int) {
+func (t *IncreamentTrack) checkAndMarkInsert(position CodeInsertPosition, line int) {
 	if t.granularity.IsLine() {
-		t.checkAndInsertByLine(position, line)
+		t.checkAndMarkInsertByLine(position, line)
 	} else if t.granularity.IsBlock() {
-		t.checkAndInsertStmtByBlock(position, line)
+		t.checkAndMarkInsertStmtByBlock(position, line)
 	} else if t.granularity.IsFunc() {
-		t.checkAndInsertStmtByFunc(position, line)
+		t.checkAndMarkInsertStmtByFunc(position, line)
+	} else if t.granularity.IsScope() {
+		t.checkAndMarkInsertStmtByScope(position, line)
 	}
 }
 
-func (t *IncreamentTrack) checkAndInsertStmtByFunc(position CodeInsertPosition, line int) {
+func (t *IncreamentTrack) checkAndMarkInsertStmtByScope(position CodeInsertPosition, line int) {
 	if t.isLineChanged(line) {
-		t.addInsert(position, CodeInsertTypeStmt, line)
+
+		id := t.trackScopes.Search(line)
+		if id == -1 {
+			return
+		}
+		trackScope := t.trackScopes[id].Search(line)
+		if _, ok := t.visitedTrackScopes[TrackScopeKey{StartLine: trackScope.StartLine, EndLine: trackScope.EndLine}]; ok {
+			return
+		}
+		t.visitedTrackScopes[TrackScopeKey{StartLine: trackScope.StartLine, EndLine: trackScope.EndLine}] = struct{}{}
+		t.markInsert(position, CodeInsertTypeStmt, line)
 	}
 }
 
-func (t *IncreamentTrack) checkAndInsertByLine(position CodeInsertPosition, line int) {
+func (t *IncreamentTrack) checkAndMarkInsertStmtByFunc(position CodeInsertPosition, line int) {
 	if t.isLineChanged(line) {
-		t.addInsert(position, CodeInsertTypeStmt, line)
+		var valid bool
+		line, valid = t.getInsertPositionInFunctionBody(line)
+		if !valid {
+			return
+		}
+		t.markInsert(position, CodeInsertTypeStmt, line)
 	}
 }
 
-func (t *IncreamentTrack) checkAndInsertStmtByBlock(position CodeInsertPosition, line int) {
+func (t *IncreamentTrack) checkAndMarkInsertByLine(position CodeInsertPosition, line int) {
+	if t.isLineChanged(line) {
+		t.markInsert(position, CodeInsertTypeStmt, line)
+	}
+}
+
+func (t *IncreamentTrack) checkAndMarkInsertStmtByBlock(position CodeInsertPosition, line int) {
 	if t.isLineChanged(line) {
 		// check if the content between the last inserted line and the current line are all comments or empty lines
 		next := t.lastBlockInsertLine + 1
@@ -263,12 +300,12 @@ func (t *IncreamentTrack) checkAndInsertStmtByBlock(position CodeInsertPosition,
 		}
 
 		if next != line {
-			t.addInsert(position, CodeInsertTypeStmt, line)
+			t.markInsert(position, CodeInsertTypeStmt, line)
 		} else {
 			lastInsertBlockScope := t.blockScopes.Search(t.lastBlockInsertLine)
 			currentBlockScope := t.blockScopes.Search(line)
 			if lastInsertBlockScope != currentBlockScope {
-				t.addInsert(position, CodeInsertTypeStmt, line)
+				t.markInsert(position, CodeInsertTypeStmt, line)
 			}
 		}
 		t.lastBlockInsertLine = line
@@ -296,16 +333,28 @@ func (t *IncreamentTrack) isLineChangedRange(start, end int) bool {
 	return false
 }
 
-func (t *IncreamentTrack) addInsert(position CodeInsertPosition, codeType CodeInsertType, line int) {
-
+func (t *IncreamentTrack) markSpecialInsert(position CodeInsertPosition, codeType CodeInsertType, line int) {
 	if t.granularity.IsFunc() {
 		var valid bool
 		line, valid = t.getInsertPositionInFunctionBody(line)
 		if !valid {
 			return
 		}
+	} else if t.granularity.IsScope() {
+		id := t.trackScopes.Search(line)
+		if id == -1 {
+			return
+		}
+		trackScope := t.trackScopes[id].Search(line)
+		if _, ok := t.visitedTrackScopes[TrackScopeKey{StartLine: trackScope.StartLine, EndLine: trackScope.EndLine}]; ok {
+			return
+		}
+		t.visitedTrackScopes[TrackScopeKey{StartLine: trackScope.StartLine, EndLine: trackScope.EndLine}] = struct{}{}
 	}
+	t.markInsert(position, codeType, line)
+}
 
+func (t *IncreamentTrack) markInsert(position CodeInsertPosition, codeType CodeInsertType, line int) {
 	for utils.IsGoComment(t.source[line-1]) {
 		line++
 	}
@@ -524,11 +573,11 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 			}
 
 			if changed {
-				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Body.Lbrace).Line+1)
+				t.markSpecialInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Body.Lbrace).Line+1)
 				if n.Else != nil {
 					elseStmt, ok := n.Else.(*ast.BlockStmt)
 					if ok && len(elseStmt.List) > 0 {
-						t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt,
+						t.markSpecialInsert(CodeInsertPositionFront, CodeInsertTypeStmt,
 							fset.Position(elseStmt.Lbrace).Line+1)
 					}
 				}
@@ -552,7 +601,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 			if changed && n.Body != nil {
 				for _, subStmt := range n.Body.List {
 					if caseClause, ok := subStmt.(*ast.CaseClause); ok && len(caseClause.Body) > 0 {
-						t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt,
+						t.markSpecialInsert(CodeInsertPositionFront, CodeInsertTypeStmt,
 							fset.Position(caseClause.Colon).Line+1)
 					}
 				}
@@ -565,9 +614,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 					fset.Position(n.Init.End()).Line)
 			}
 			if !changed && n.Assign != nil {
-				changed = t.isLineChangedRange(fset.Position(n.Assign.Pos()).Line,
-
-					fset.Position(n.Assign.End()).Line)
+				changed = t.isLineChangedRange(fset.Position(n.Assign.Pos()).Line, fset.Position(n.Assign.End()).Line)
 			}
 
 			// Judge if the type switch statement is changed:
@@ -577,7 +624,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 			if changed && n.Body != nil {
 				for _, subStmt := range n.Body.List {
 					if caseClause, ok := subStmt.(*ast.CaseClause); ok && len(caseClause.Body) > 0 {
-						t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt,
+						t.markSpecialInsert(CodeInsertPositionFront, CodeInsertTypeStmt,
 							fset.Position(caseClause.Colon).Line+1)
 					}
 				}
@@ -587,26 +634,24 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 			changed = t.isLineChanged(fset.Position(n.Case).Line)
 			if !changed && len(n.List) > 0 {
 				for _, expr := range n.List {
-					changed = t.isLineChangedRange(fset.Position(expr.Pos()).Line,
-						fset.Position(expr.End()).Line)
+					changed = t.isLineChangedRange(fset.Position(expr.Pos()).Line, fset.Position(expr.End()).Line)
 					if changed {
 						break
 					}
 				}
 			}
 			if changed {
-				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Colon).Line+1)
+				t.markSpecialInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Colon).Line+1)
 			}
 
 		case *ast.CommClause:
 			// return true
 			changed = t.isLineChanged(fset.Position(n.Case).Line)
 			if !changed && n.Comm != nil {
-				changed = t.isLineChangedRange(fset.Position(n.Comm.Pos()).Line,
-					fset.Position(n.Comm.End()).Line)
+				changed = t.isLineChangedRange(fset.Position(n.Comm.Pos()).Line, fset.Position(n.Comm.End()).Line)
 			}
 			if changed {
-				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Colon).Line+1)
+				t.markSpecialInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Colon).Line+1)
 			}
 		case *ast.RangeStmt:
 			if n.Body == nil {
@@ -627,12 +672,11 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 					fset.Position(n.Value.End()).Line)
 			}
 			if !changed && n.X != nil {
-				changed = t.isLineChangedRange(fset.Position(n.X.Pos()).Line,
-					fset.Position(n.X.End()).Line)
+				changed = t.isLineChangedRange(fset.Position(n.X.Pos()).Line, fset.Position(n.X.End()).Line)
 			}
 
 			if changed {
-				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Body.Lbrace).Line+1)
+				t.markSpecialInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Body.Lbrace).Line+1)
 			}
 		case *ast.ForStmt:
 			if n.Body == nil {
@@ -657,7 +701,7 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 			}
 
 			if changed {
-				t.addInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Body.Lbrace).Line+1)
+				t.markSpecialInsert(CodeInsertPositionFront, CodeInsertTypeStmt, fset.Position(n.Body.Lbrace).Line+1)
 			}
 		}
 		return true
@@ -668,9 +712,12 @@ func (t *IncreamentTrack) processSpecialStatements(node ast.Node, fset *token.Fi
 // nodes before each statement in the function body.
 func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.FileSet) {
 	for _, stmt := range statList {
+		if stmt == nil {
+			continue
+		}
 		switch s := stmt.(type) {
 		case *ast.AssignStmt:
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.checkAndMarkInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			t.adjustLastBlockInsertLine(fset.Position(s.Pos()).Line, fset.Position(s.End()).Line)
 			t.analyzeAndModifyExpr(s.Rhs, fset)
 		case *ast.IfStmt:
@@ -702,10 +749,10 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 		case *ast.CaseClause:
 			t.processStatements(s.Body, fset)
 		case *ast.BlockStmt:
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.checkAndMarkInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			t.processStatements(s.List, fset)
 		case *ast.ReturnStmt:
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.checkAndMarkInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			t.analyzeAndModifyExpr(s.Results, fset)
 		case *ast.DeferStmt:
 			if s.Call != nil && s.Call.Fun != nil {
@@ -716,7 +763,7 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 				t.processStatements(s.Body.List, fset)
 			}
 		case *ast.GoStmt:
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.checkAndMarkInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 			if s.Call != nil && s.Call.Fun != nil {
 				t.analyzeAndModifyExpr([]ast.Expr{s.Call.Fun}, fset)
 			}
@@ -727,7 +774,7 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 		case *ast.ExprStmt:
 			switch s.X.(type) {
 			case *ast.CallExpr:
-				t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+				t.checkAndMarkInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 				expr := s.X.(*ast.CallExpr)
 				if expr.Fun != nil {
 					t.analyzeAndModifyExpr([]ast.Expr{expr.Fun}, fset)
@@ -737,8 +784,10 @@ func (t *IncreamentTrack) processStatements(statList []ast.Stmt, fset *token.Fil
 				}
 			default:
 			}
+		case *ast.LabeledStmt:
+			t.processStatements([]ast.Stmt{s.Stmt}, fset)
 		default:
-			t.checkAndInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
+			t.checkAndMarkInsert(CodeInsertPositionFront, fset.Position(s.Pos()).Line)
 		}
 	}
 }
@@ -752,6 +801,7 @@ func (t *IncreamentTrack) analyzeAndModifyExpr(exprList []ast.Expr, fset *token.
 		}
 		switch expr := expr.(type) {
 		case *ast.FuncLit:
+
 			if expr.Body == nil || len(expr.Body.List) == 0 {
 				continue
 			}

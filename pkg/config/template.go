@@ -40,7 +40,7 @@ goatPackageAlias: {{.GoatPackageAlias}}
 ## Goat package path, where goat is installed in your project
 goatPackagePath: {{.GoatPackagePath}}
 
-## Granularity ([line, block, func], default: block)
+## Granularity ([line, block, scope, func], default: block)
 granularity: {{.Granularity}}
 
 ## Diff precision (1~2, default: 1)
