@@ -4,10 +4,11 @@ package increament_test
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"slices"
+
+	"github.com/monshunter/goat/pkg/log"
 )
 
 // application version
@@ -207,7 +208,7 @@ func ServeHTTP(component Component) {
 			expose = "0.0.0.0"
 		}
 		addr := fmt.Sprintf("%s:%s", expose, port)
-		log.Printf("Goat track service started: http://%s\n", addr)
+		log.Infof("Goat track service started: http://%s\n", addr)
 		log.Fatal(http.ListenAndServe(addr, system))
 	}()
 }

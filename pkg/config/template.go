@@ -74,4 +74,7 @@ printerConfigIndent: {{.PrinterConfigIndent}}
 
 ## Data type ([truth, count, average], default: truth)
 dataType: {{.DataType}}
+
+## Verbose output (default: false)
+verbose: {{.Verbose}}
 `

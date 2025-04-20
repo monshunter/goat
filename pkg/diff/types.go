@@ -7,6 +7,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/format/diff"
+	"github.com/monshunter/goat/pkg/config"
 )
 
 type DifferInterface interface {
@@ -159,4 +160,45 @@ func getLineChange(filePatch diff.FilePatch) []LineChange {
 		}
 	}
 	return lineChanges
+}
+
+// checkUncommittedChanges checks if there are uncommitted changes in the working directory
+func checkUncommittedChanges(repo *git.Repository) error {
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	status, err := worktree.Status()
+	if err != nil {
+		return fmt.Errorf("failed to get git status: %w", err)
+	}
+
+	if !status.IsClean() {
+		// Check if there are all untracked files
+		hasNonUntracked := false
+		for _, fileStatus := range status {
+			if fileStatus.Staging != git.Untracked || fileStatus.Worktree != git.Untracked {
+				hasNonUntracked = true
+				break
+			}
+		}
+		if !hasNonUntracked {
+			return nil
+		}
+		// Check if only config.ConfigYaml is modified
+		configModifiedOnly := true
+		for filePath, fileStatus := range status {
+			if filePath != config.ConfigYaml &&
+				(fileStatus.Staging != git.Unmodified || fileStatus.Worktree != git.Unmodified) {
+				configModifiedOnly = false
+				break
+			}
+		}
+		if configModifiedOnly {
+			return nil
+		}
+		return fmt.Errorf("there are uncommitted changes in the working directory")
+	}
+	return nil
 }

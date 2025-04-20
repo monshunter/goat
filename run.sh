@@ -16,9 +16,9 @@ publishBranch="0709dcc"
 # stableBranch="c5ce5f0"
 # publishBranch="HEAD"
 
-project="/Users/tanzhangyu/Documents/opensources/kubernetes"
-stableBranch="release-1.31"
-publishBranch="release-1.32"
+# project="/Users/tanzhangyu/Documents/opensources/kubernetes"
+# stableBranch="release-1.31"
+# publishBranch="release-1.32"
 # pkg/controller/volume/selinuxwarning/selinux_warning_controller.go
 # c5f48fd 0709dcc
 go install ./cmd/goat

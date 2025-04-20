@@ -2,9 +2,10 @@ package goat
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"slices"
+
+	"github.com/monshunter/goat/pkg/log"
 
 	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/maininfo"
@@ -38,20 +39,27 @@ func NewFixExecutor(cfg *config.Config) *FixExecutor {
 }
 
 func (f *FixExecutor) Run() error {
+	log.Infof("init main package infos")
 	if err := f.initMainPackageInfos(); err != nil {
+		log.Errorf("failed to init main package infos: %v", err)
 		return err
 	}
+	log.Infof("preparing files")
 	if err := f.prepare(); err != nil {
+		log.Errorf("failed to prepare: %v", err)
 		return err
 	}
 
 	if !f.changed {
-		log.Printf("no files +goat:delete, +goat:insert found, no need to apply")
+		log.Infof("no files +goat:delete, +goat:insert found, no need to apply")
 		return nil
 	}
+	log.Infof("applying fix")
 	if err := f.apply(); err != nil {
+		log.Errorf("failed to apply fix: %v", err)
 		return err
 	}
+	log.Infof("fix applied")
 	return nil
 }
 
@@ -66,8 +74,8 @@ func (f *FixExecutor) initMainPackageInfos() error {
 
 func (f *FixExecutor) prepare() error {
 	files, err := prepareFiles(f.cfg)
-
 	if err != nil {
+		log.Errorf("failed to prepare files: %v", err)
 		return err
 	}
 
@@ -75,6 +83,7 @@ func (f *FixExecutor) prepare() error {
 		var content string
 		contentBytes, err := os.ReadFile(file)
 		if err != nil {
+			log.Errorf("failed to read file: %v", err)
 			return err
 		}
 		updated := false
@@ -82,6 +91,7 @@ func (f *FixExecutor) prepare() error {
 		// handle // + goat:delete
 		count, content, err = handleGoatDelete(f.cfg.PrinterConfig(), string(contentBytes), f.goatImportPath, f.goatPackageAlias)
 		if err != nil {
+			log.Errorf("failed to handle goat delete: %v", err)
 			return err
 		}
 		updated = updated || count > 0
@@ -89,6 +99,7 @@ func (f *FixExecutor) prepare() error {
 		// handle // + goat:insert
 		count, content, err = handleGoatInsert(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
 		if err != nil {
+			log.Errorf("failed to handle goat insert: %v", err)
 			return err
 		}
 		updated = updated || count > 0
@@ -96,6 +107,7 @@ func (f *FixExecutor) prepare() error {
 		// handle // + goat:generate
 		count, content, err = resetGoatGenerate(content)
 		if err != nil {
+			log.Errorf("failed to reset goat generate: %v", err)
 			return err
 		}
 		updated = updated || count > 0
@@ -110,6 +122,7 @@ func (f *FixExecutor) prepare() error {
 		if isMainEntry {
 			count, content, err = resetGoatMain(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
 			if err != nil {
+				log.Errorf("failed to reset goat main entry: %v", err)
 				return err
 			}
 			updated = updated || count > 0
@@ -135,6 +148,7 @@ func (f *FixExecutor) replaceTracks() (int, error) {
 		count, newContent, err := utils.Replace(content, increament.TrackStmtPlaceHolder,
 			increament.IncreamentReplaceStmt(f.cfg.GoatPackageAlias, start))
 		if err != nil {
+			log.Errorf("failed to replace track stmt: %v", err)
 			return 0, err
 		}
 		f.fileTrackIdStartMap[file] = trackIdxInterval{start: start, end: start + count - 1}
@@ -142,6 +156,7 @@ func (f *FixExecutor) replaceTracks() (int, error) {
 		_, newContent, err = utils.Replace(newContent, fmt.Sprintf("%q", increament.TrackImportPathPlaceHolder),
 			increament.IncreamentReplaceImport(f.cfg.GoatPackageAlias, importPath))
 		if err != nil {
+			log.Errorf("failed to replace track import: %v", err)
 			return 0, err
 		}
 		f.filesContents[file] = newContent
@@ -152,12 +167,14 @@ func (f *FixExecutor) replaceTracks() (int, error) {
 func (f *FixExecutor) apply() error {
 	count, err := f.replaceTracks()
 	if err != nil {
+		log.Errorf("failed to replace tracks: %v", err)
 		return err
 	}
-	log.Printf("replaced %d tracks", count)
+	log.Infof("total replaced tracks: %d", count)
 
 	err = f.applyTracks()
 	if err != nil {
+		log.Errorf("failed to apply tracks: %v", err)
 		return err
 	}
 
@@ -172,6 +189,7 @@ func (f *FixExecutor) apply() error {
 	if len(trackIdxs) == 0 {
 		err = values.Remove(f.cfg.GoatGeneratedFile())
 		if err != nil {
+			log.Errorf("failed to remove goat_generated.go: %v", err)
 			return err
 		}
 		return nil
@@ -180,11 +198,13 @@ func (f *FixExecutor) apply() error {
 	values.AddTrackIds(trackIdxs)
 	err = values.Save(f.cfg.GoatGeneratedFile())
 	if err != nil {
+		log.Errorf("failed to save goat_generated.go: %v", err)
 		return err
 	}
 
 	// apply main entry
 	if err := applyMainEntry(f.cfg, f.goModule, f.mainPackageInfos, componentTrackIdxs); err != nil {
+		log.Errorf("failed to apply main entry: %v", err)
 		return err
 	}
 	return nil
@@ -194,22 +214,22 @@ func (f *FixExecutor) applyTracks() error {
 	for file, content := range f.filesContents {
 		fset, fileAst, err := utils.GetAstTree("", []byte(content))
 		if err != nil {
-			log.Printf("error: failed to get ast tree: %s, file: %s\n", err, file)
+			log.Errorf("failed to get ast tree: %v, file: %s\n", err, file)
 			return err
 		}
 		contentBytes, err := utils.FormatAst(f.cfg.PrinterConfig(), fset, fileAst)
 		if err != nil {
-			log.Printf("error: failed to format ast: %s, file: %s\n", err, file)
+			log.Errorf("failed to format ast: %v, file: %s\n", err, file)
 			return err
 		}
 		info, err := os.Stat(file)
 		if err != nil {
-			log.Printf("error: failed to get file info: %s, file: %s\n", err, file)
+			log.Errorf("failed to get file info: %v, file: %s\n", err, file)
 			return err
 		}
 		err = os.WriteFile(file, contentBytes, info.Mode().Perm())
 		if err != nil {
-			log.Printf("error: failed to write file: %s, file: %s\n", err, file)
+			log.Errorf("failed to write file: %v, file: %s\n", err, file)
 			return err
 		}
 	}

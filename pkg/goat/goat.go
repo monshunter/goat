@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/printer"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/monshunter/goat/pkg/log"
 
 	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/diff"
@@ -20,20 +21,20 @@ import (
 func debugChanges(changes []*diff.FileChange) {
 	result, err := json.MarshalIndent(changes, "", "  ")
 	if err != nil {
-		log.Printf("failed to marshal changes: %v", err)
+		log.Errorf("failed to marshal changes: %v", err)
 		return
 	}
-	log.Printf("changes: %s", string(result))
+	log.Infof("changes: %s", string(result))
 }
 
 // debugMainInfo debugs the main info
 func debugMainInfo(mainPkgInfo *maininfo.MainInfo) {
 	result, err := json.MarshalIndent(mainPkgInfo, "", "  ")
 	if err != nil {
-		log.Printf("failed to marshal main info: %v", err)
+		log.Errorf("failed to marshal main info: %v", err)
 		return
 	}
-	log.Printf("main info: %s", string(result))
+	log.Infof("main info: %s", string(result))
 }
 
 // getDiff gets the diff
@@ -78,7 +79,7 @@ type goatFile struct {
 
 func debugComponentTrackIdxs(componentTrackIdxs []componentTrackIdx) {
 	for _, component := range componentTrackIdxs {
-		log.Printf("component: %d, %s, %d, %v\n",
+		log.Infof("component: %d, %s, %d, %v\n",
 			component.componentId, component.component, len(component.trackIdx), component.trackIdx)
 	}
 }
@@ -151,11 +152,11 @@ func getTotalTrackIdxs(fileTrackIdStartMap map[string]trackIdxInterval) []int {
 func getMainPackageInfos(projectRoot string, goModule string, ignores []string) ([]maininfo.MainPackageInfo, error) {
 	mainPkgInfo, err := maininfo.NewMainInfo(projectRoot, goModule, ignores)
 	if err != nil {
-		log.Printf("failed to get main info: %v", err)
+		log.Errorf("failed to get main info: %v", err)
 		return nil, err
 	}
 	if len(mainPkgInfo.MainPackageInfos) == 0 {
-		log.Printf("warning: no main package info found")
+		log.Errorf("warning: no main package info found")
 		return nil, fmt.Errorf("warning: no main package info found")
 	}
 	return mainPkgInfo.MainPackageInfos, nil
@@ -177,7 +178,7 @@ func applyMainEntry(cfg *config.Config, goModule string,
 		codes := increament.GetMainEntryInsertData(cfg.GoatPackageAlias, i)
 		_, err := mainInfo.ApplyMainEntry(cfg.PrinterConfig(), cfg.GoatPackageAlias, importPath, codes)
 		if err != nil {
-			log.Printf("failed to apply main entry: %v", err)
+			log.Errorf("failed to apply main entry: %v", err)
 			return err
 		}
 	}
@@ -214,12 +215,14 @@ func handleGoatInsert(cfg *printer.Config, fileContents string, goatImportPath s
 			return increament.GetPackageInsertDataString()
 		})
 	if err != nil {
+		log.Errorf("failed to handle goat insert: %v", err)
 		return 0, "", err
 	}
 	if count > 0 {
 		// add the import path
 		bytes, err := utils.AddImport(cfg, goatImportPath, goatPackageAlias, "", []byte(content))
 		if err != nil {
+			log.Errorf("failed to add import: %v", err)
 			return 0, "", err
 		}
 		return count, string(bytes), nil
@@ -240,6 +243,7 @@ func resetGoatMain(cfg *printer.Config, fileContents string, goatImportPath stri
 			return ""
 		})
 	if err != nil {
+		log.Errorf("failed to reset goat main: %v", err)
 		return 0, "", err
 	}
 	if count > 0 {
@@ -249,6 +253,7 @@ func resetGoatMain(cfg *printer.Config, fileContents string, goatImportPath stri
 			// delete the import path
 			bytes, err := utils.DeleteImport(cfg, goatImportPath, goatPackageAlias, "", []byte(content))
 			if err != nil {
+				log.Errorf("failed to delete import: %v", err)
 				return 0, "", err
 			}
 			return count, string(bytes), nil
@@ -260,8 +265,9 @@ func resetGoatMain(cfg *printer.Config, fileContents string, goatImportPath stri
 func prepareFiles(cfg *config.Config) (files []string, err error) {
 	files = make([]string, 0)
 	err = filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
-
+		log.Debugf("prepare files: %s", path)
 		if err != nil {
+			log.Errorf("failed to walk: %v", err)
 			return err
 		}
 		if info.IsDir() {

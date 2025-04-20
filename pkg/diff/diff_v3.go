@@ -31,6 +31,11 @@ func NewDifferV3(cfg *config.Config) (*DifferV3, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
+
+	if err := checkUncommittedChanges(repo); err != nil {
+		return nil, fmt.Errorf("failed to check uncommitted changes: %w", err)
+	}
+
 	d := &DifferV3{
 		repo: repo,
 		cfg:  cfg,

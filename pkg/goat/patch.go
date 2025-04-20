@@ -2,8 +2,9 @@ package goat
 
 import (
 	"fmt"
-	"log"
 	"sort"
+
+	"github.com/monshunter/goat/pkg/log"
 
 	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/diff"
@@ -35,24 +36,23 @@ func NewPatchExecutor(cfg *config.Config) *PatchExecutor {
 // Run runs the patch executor
 func (p *PatchExecutor) Run() error {
 	if err := p.initChanges(); err != nil {
-		return err
+		return fmt.Errorf("failed to initialize changes: %w", err)
 	}
+
 	if err := p.initMainPackageInfos(); err != nil {
-		return err
+		return fmt.Errorf("failed to initialize main packages: %w", err)
 	}
-	// debugChanges(p.changes)
-	// debugMainInfo(p.mainPkgInfo)
 
 	if err := p.initTracks(); err != nil {
-		return err
+		return fmt.Errorf("failed to initialize trackers: %w", err)
 	}
-	// fmt.Println("before replace", string(p.trackers[0].Bytes()))
 
 	count, err := p.replaceTracks()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to replace tracks: %w", err)
 	}
-	log.Printf("replaced %d tracks", count)
+
+	log.Debugf("Replaced %d tracking points", count)
 
 	componentTrackIdxs := getComponentTrackIdxs(p.fileTrackIdStartMap, p.mainPackageInfos)
 
@@ -63,17 +63,19 @@ func (p *PatchExecutor) Run() error {
 
 	values.AddTrackIds(getTotalTrackIdxs(p.fileTrackIdStartMap))
 
-	err = values.Save(p.cfg.GoatGeneratedFile())
-	if err != nil {
-		return err
+	if err = values.Save(p.cfg.GoatGeneratedFile()); err != nil {
+		return fmt.Errorf("failed to save generated file %s: %w", p.cfg.GoatGeneratedFile(), err)
 	}
 
 	if err := p.saveTracks(); err != nil {
-		return err
+		return fmt.Errorf("failed to save tracking points: %w", err)
 	}
+
 	if err := applyMainEntry(p.cfg, p.goModule, p.mainPackageInfos, componentTrackIdxs); err != nil {
-		return err
+		return fmt.Errorf("failed to apply main entry: %w", err)
 	}
+
+	log.Infof("Patch applied successfully with %d tracking points", count)
 	return nil
 }
 
@@ -81,14 +83,14 @@ func (p *PatchExecutor) Run() error {
 func (p *PatchExecutor) initChanges() error {
 	changes, err := getDiff(p.cfg)
 	if err != nil {
-		log.Printf("failed to get differ: %v", err)
-		return err
+		return fmt.Errorf("failed to get code differences: %w", err)
 	}
 	sort.Slice(changes, func(i, j int) bool {
 		return changes[i].Path < changes[j].Path
 	})
 
 	p.changes = changes
+	log.Debugf("Found %d file changes", len(changes))
 	return nil
 }
 
@@ -96,9 +98,10 @@ func (p *PatchExecutor) initChanges() error {
 func (p *PatchExecutor) initMainPackageInfos() error {
 	mainPkgInfos, err := getMainPackageInfos(".", p.goModule, p.cfg.Ignores)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get main package info: %w", err)
 	}
 	p.mainPackageInfos = mainPkgInfos
+	log.Debugf("Found %d main packages", len(mainPkgInfos))
 	return nil
 }
 
@@ -108,13 +111,13 @@ func (p *PatchExecutor) initTracks() error {
 	for i, change := range p.changes {
 		tracker, err := p.handleDiffChange(change)
 		if err != nil {
-			log.Printf("failed to handle diff change: %v", err)
-			return err
+			return fmt.Errorf("failed to handle file change %s: %w", change.Path, err)
 		}
 		trackers[i] = tracker
 	}
 
 	p.trackers = trackers
+	log.Debugf("Initialized %d trackers", len(trackers))
 	return nil
 }
 
@@ -124,16 +127,14 @@ func (p *PatchExecutor) handleDiffChange(change *diff.FileChange) (tracking.Trac
 		increament.TrackImportPathPlaceHolder, increament.GetPackageInsertData(),
 		nil, granularity, p.cfg.PrinterConfig())
 	if err != nil {
-		log.Printf("failed to get tracker: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to create incremental tracker: %w", err)
 	}
 	_, err = tracker.Track()
 	if err != nil {
-		log.Printf("failed to track: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to track file: %w", err)
 	}
+	log.Debugf("Successfully tracked file: %s", change.Path)
 	return tracker, nil
-
 }
 
 // replaceTracks replaces the tracks
@@ -143,29 +144,30 @@ func (p *PatchExecutor) replaceTracks() (int, error) {
 	for i, tracker := range p.trackers {
 		count, err := tracker.Replace(increament.TrackStmtPlaceHolder, increament.IncreamentReplaceStmt(p.cfg.GoatPackageAlias, start))
 		if err != nil || count != tracker.Count() {
-			log.Printf("failed to replace stmt: file: %s, err: %v, count: %d, expected: %d\n", tracker.TargetFile(), err, count, tracker.Count())
-			return 0, err
+			return 0, fmt.Errorf("failed to replace statements in %s: expected=%d, actual=%d: %w",
+				tracker.TargetFile(), tracker.Count(), count, err)
 		}
 		p.fileTrackIdStartMap[p.changes[i].Path] = trackIdxInterval{start: start, end: start + count - 1}
 		start += count
 		_, err = tracker.Replace(fmt.Sprintf("%q", increament.TrackImportPathPlaceHolder),
 			increament.IncreamentReplaceImport(p.cfg.GoatPackageAlias, importPath))
 		if err != nil {
-			log.Printf("failed to replace import: i: %d, err: %v, count: %d, expected: %d\n", i, err, count, tracker.Count())
-			return 0, err
+			return 0, fmt.Errorf("failed to replace import in %s: %w", tracker.TargetFile(), err)
 		}
+		log.Debugf("Replaced %d tracking points in %s", count, tracker.TargetFile())
 	}
 	return start - 1, nil
 }
 
 // saveTracks saves the trackers
 func (p *PatchExecutor) saveTracks() error {
+	totalSaved := 0
 	for _, tracker := range p.trackers {
-		err := tracker.Save("")
-		if err != nil {
-			log.Printf("failed to save tracker: %v", err)
-			return err
+		if err := tracker.Save(""); err != nil {
+			return fmt.Errorf("failed to save tracker for %s: %w", tracker.TargetFile(), err)
 		}
+		totalSaved++
 	}
+	log.Debugf("Saved %d tracker files", totalSaved)
 	return nil
 }

@@ -13,6 +13,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var ConfigYaml string
+
+func init() {
+	ConfigYaml = "goat.yaml"
+	if os.Getenv("GOAT_CONFIG") != "" {
+		ConfigYaml = os.Getenv("GOAT_CONFIG")
+	}
+}
+
 const goatGeneratedFile = "goat_generated.go"
 
 const (
@@ -225,8 +234,6 @@ func GetDataType(s string) (DataType, error) {
 }
 
 // Config configuration struct
-
-// Config configuration struct
 type Config struct {
 	// App name
 	AppName string `yaml:"appName"` // goat
@@ -268,6 +275,8 @@ type Config struct {
 	printerConfig *printer.Config `yaml:"-"`
 	// Data type
 	DataType string `yaml:"dataType"` // default: truth
+	// Verbose output
+	Verbose bool `yaml:"verbose"` // default: false
 }
 
 // Validate validates the config

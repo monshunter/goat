@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/monshunter/goat/pkg/log"
 
 	"github.com/monshunter/goat/pkg/config"
 	"github.com/spf13/cobra"
@@ -53,7 +54,7 @@ Examples:
 			if _, err := os.Stat(project); os.IsNotExist(err) {
 				return fmt.Errorf("project %s not found", project)
 			}
-			log.Printf("Initializing project: %s\n", project)
+			log.Info("initializing project")
 			project, err := filepath.Abs(project)
 			if err != nil {
 				return fmt.Errorf("failed to get absolute path: %w", err)
@@ -128,18 +129,19 @@ Examples:
 				return fmt.Errorf("failed to validate config: %w", err)
 			}
 
-			filename := configYaml
-			if !filepath.IsAbs(configYaml) {
-				filename = filepath.Join(project, configYaml)
+			filename := config.ConfigYaml
+			if !filepath.IsAbs(config.ConfigYaml) {
+				filename = filepath.Join(project, config.ConfigYaml)
 			}
 			// initialize config
+			log.Infof("initializing config: %s", filename)
 			err = config.InitWithConfig(filename, cfg)
 			if err != nil {
 				log.Fatalf("failed to initialize project: %v", err)
 				return err
 			}
 
-			log.Printf("Project initialized successfully")
+			log.Info("project initialized successfully")
 			return nil
 		},
 	}
