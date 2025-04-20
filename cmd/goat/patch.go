@@ -42,7 +42,22 @@ Examples:
 			}
 
 			executor := goat.NewPatchExecutor(cfg)
-			return executor.Run()
+			err = executor.Run()
+			if err != nil {
+				return err
+			}
+
+			// 显示成功提示和后续建议
+			log.Info("----------------------------------------------------------")
+			log.Info("✅ Patch completed successfully!")
+			log.Info("You can:")
+			log.Info("- Review the changes using git diff or your preferred diff tool")
+			log.Info("- Build and test your application to verify instrumentation")
+			log.Info("- If you manualy add or remove instrumentation, run 'goat fix' to update the instrumentation")
+			log.Info("- To remove all instrumentation, run 'goat clean'")
+			log.Info("----------------------------------------------------------")
+
+			return nil
 		},
 	}
 	return cmd

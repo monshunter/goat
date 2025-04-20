@@ -14,8 +14,12 @@ import (
 func fixCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "fix",
-		Short: "Fix instrumentation code in the project",
-		Long: `The fix command is used to fix potentially problematic instrumentation code in the project.
+		Short: "Process manual instrumentation markers in the project",
+		Long: `The fix command is used to process manual instrumentation markers in the project.
+
+It primarily handles:
+  - // +goat:delete markers - removes code segments marked for deletion
+  - // +goat:insert markers - inserts code at marked positions
 
 Examples:
   goat fix`,
@@ -36,6 +40,18 @@ Examples:
 			if err := executor.Run(); err != nil {
 				return err
 			}
+
+			// 显示成功提示和后续建议
+			log.Info("----------------------------------------------------------")
+			log.Info("✅ Fix completed successfully!")
+			log.Info("Manual markers have been processed (// +goat:delete, // +goat:insert)")
+			log.Info("You can:")
+			log.Info("- Review the changes using git diff or your preferred diff tool")
+			log.Info("- Build and test your application to verify the changes")
+			log.Info("- Add more manual markers and run 'goat fix' again if needed")
+			log.Info("- If you want to remove all instrumentation, run 'goat clean'")
+			log.Info("----------------------------------------------------------")
+
 			return nil
 		},
 	}

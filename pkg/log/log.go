@@ -31,7 +31,20 @@ var (
 	level LogLevel = INFO
 	// enable color output
 	colorEnabled = true
+	// enable stack trace on fatal errors
+	stackTraceEnabled bool
 )
+
+// Environment variable for controlling stack trace
+const (
+	EnvStackTrace = "GOAT_STACK_TRACE"
+)
+
+func init() {
+	// Check environment variable for stack trace setting
+	stackTraceEnv := os.Getenv(EnvStackTrace)
+	stackTraceEnabled = stackTraceEnv == "1" || stackTraceEnv == "true" || stackTraceEnv == "yes"
+}
 
 // ANSI color codes
 const (
@@ -74,6 +87,16 @@ func EnableColor(enabled bool) {
 // IsColorEnabled returns if color output is enabled
 func IsColorEnabled() bool {
 	return colorEnabled
+}
+
+// EnableStackTrace enables or disables stack trace on fatal errors
+func EnableStackTrace(enabled bool) {
+	stackTraceEnabled = enabled
+}
+
+// IsStackTraceEnabled returns if stack trace is enabled
+func IsStackTraceEnabled() bool {
+	return stackTraceEnabled
 }
 
 // getLevelColor returns the color for the given log level
@@ -153,14 +176,22 @@ func Errorf(format string, args ...any) {
 // Fatal output fatal log and exit program
 func Fatal(args ...any) {
 	log("FATAL", FATAL, args...)
-	fmt.Fprintf(os.Stderr, "Stack trace:\n%s\n", debug.Stack())
+	if stackTraceEnabled {
+		fmt.Fprintf(os.Stderr, "Stack trace:\n%s\n", debug.Stack())
+	} else {
+		fmt.Fprintln(os.Stderr, "For detailed stack trace, set GOAT_STACK_TRACE=1")
+	}
 	osExit(1)
 }
 
 // Fatalf output formatted fatal log and exit program
 func Fatalf(format string, args ...any) {
 	logf("FATAL", FATAL, format, args...)
-	fmt.Fprintf(os.Stderr, "Stack trace:\n%s\n", debug.Stack())
+	if stackTraceEnabled {
+		fmt.Fprintf(os.Stderr, "Stack trace:\n%s\n", debug.Stack())
+	} else {
+		fmt.Fprintln(os.Stderr, "For detailed stack trace, set GOAT_STACK_TRACE=1")
+	}
 	osExit(1)
 }
 

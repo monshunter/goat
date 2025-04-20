@@ -33,7 +33,22 @@ Examples:
 				return err
 			}
 			cleanExecutor := goat.NewCleanExecutor(cfg)
-			return cleanExecutor.Run()
+			err = cleanExecutor.Run()
+			if err != nil {
+				return err
+			}
+
+			// 显示成功提示和后续建议
+			log.Info("----------------------------------------------------------")
+			log.Info("✅ Clean completed successfully!")
+			log.Info("All instrumentation code has been removed from your project.")
+			log.Info("You can:")
+			log.Info("- Review the changes using git diff or your preferred diff tool")
+			log.Info("- Build and test your application to verify clean up")
+			log.Info("- If you want to reapply instrumentation, run 'goat patch'")
+			log.Info("----------------------------------------------------------")
+
+			return nil
 		},
 	}
 

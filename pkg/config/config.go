@@ -259,8 +259,6 @@ type Config struct {
 	Threads int `yaml:"threads"` // 1~128
 	// Race
 	Race bool `yaml:"race"` // true, false
-	// Clone branch
-	CloneBranch bool `yaml:"cloneBranch"` // true, false
 	// Main packages to track
 	MainEntries []string `yaml:"mainEntries"`
 	// Printer config

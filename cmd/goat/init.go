@@ -14,12 +14,9 @@ import (
 
 func initCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "init <project> [flags]",
+		Use:   "init [flags]",
 		Short: "Initialize a new project",
-		Long: `The init command is used to initialize a new project.
-
-Arguments:
-  <project> Project path
+		Long: `The init command is used to initialize a new project in the current directory.
 
 Options:
   --stable <stableBranch>               Stable branch (default: "main")
@@ -30,35 +27,48 @@ Options:
   --diff-precision <diffPrecision>      Diff precision (1-2) (default: 1)
   --threads <threads>                   Number of threads (default: 1)
   --race                                Enable race detection (default: false)
-  --clone-branch                        Clone branch (default: false)
   --goat-package-name <packageName>     Goat package name (default: "goat")
   --goat-package-alias <packageAlias>   Goat package alias (default: "goat")
   --goat-package-path <packagePath>     Goat package path (default: "goat")
   --ignores <ignores>                   Comma-separated list of files/dirs to ignore
-  --main-entries <entries>              Comma-separated list of main entries to track (default: "*")
+  --main-entries <entries>              Comma-separated list of relative paths to main packages from project root (e.g., 'cmd/server,cmd/client' or '*' for all)
   --printer-config-mode <mode>          Printer config mode, list of (none, useSpaces, tabIndent, sourcePos, rawFormat) (default: "useSpaces,tabIndent")
   --printer-config-tabwidth <tabwidth>  Printer config tabwidth (default: 8)
   --printer-config-indent <indent>      Printer config indent (default: 0)
   --data-type <dataType>                Data type (truth, count, average) (default: "truth")
+  --force                               Force overwrite existing goat.yaml file
 
 Examples:
-  goat init /path/to/project --stable master --publish "release-1.32"
-  goat init . --app-name "my-app" --app-version "2.0.0" --granularity func
-  goat init . --threads 4 --race --clone-branch
-  goat init . --ignores ".git,.idea,node_modules"
-  goat init . --main-entries "cmd/app,cmd/worker"
-  goat init . --printer-config-mode "useSpaces,tabIndent" --printer-config-tabwidth 4 --printer-config-indent 2`,
-		Args: cobra.ExactArgs(1),
+  goat init --stable master --publish "release-1.32"
+  goat init --app-name "my-app" --app-version "2.0.0" --granularity func
+  goat init --threads 4 --race
+  goat init --ignores ".git,.idea,node_modules"
+  goat init --main-entries "cmd/app,cmd/worker"
+  goat init --printer-config-mode "useSpaces,tabIndent" --printer-config-tabwidth 4 --printer-config-indent 2
+  goat init --force                     Force overwrite existing goat.yaml file`,
+		Args: cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			project := args[0]
+			project := "."
 			if _, err := os.Stat(project); os.IsNotExist(err) {
-				return fmt.Errorf("project %s not found", project)
+				return fmt.Errorf("current directory not found")
 			}
 			log.Info("initializing project")
 			project, err := filepath.Abs(project)
 			if err != nil {
 				return fmt.Errorf("failed to get absolute path: %w", err)
 			}
+
+			// Check if config file already exists
+			filename := config.ConfigYaml
+			if !filepath.IsAbs(config.ConfigYaml) {
+				filename = filepath.Join(project, config.ConfigYaml)
+			}
+
+			force, _ := cmd.Flags().GetBool("force")
+			if _, err := os.Stat(filename); err == nil && !force {
+				return fmt.Errorf("config file %s already exists. Use 'goat init --force' to overwrite or manually edit the file", filename)
+			}
+
 			// get all command line options
 			stableBranch, _ := cmd.Flags().GetString("stable")
 			publishBranch, _ := cmd.Flags().GetString("publish")
@@ -68,7 +78,6 @@ Examples:
 			diffPrecision, _ := cmd.Flags().GetInt("diff-precision")
 			threads, _ := cmd.Flags().GetInt("threads")
 			race, _ := cmd.Flags().GetBool("race")
-			cloneBranch, _ := cmd.Flags().GetBool("clone-branch")
 			goatPackageName, _ := cmd.Flags().GetString("goat-package-name")
 			goatPackageAlias, _ := cmd.Flags().GetString("goat-package-alias")
 			goatPackagePath, _ := cmd.Flags().GetString("goat-package-path")
@@ -114,7 +123,6 @@ Examples:
 				GoatPackagePath:       goatPackagePath,
 				Threads:               threads,
 				Race:                  race,
-				CloneBranch:           cloneBranch,
 				Ignores:               ignores,
 				MainEntries:           mainEntries,
 				Granularity:           granularity,
@@ -129,10 +137,6 @@ Examples:
 				return fmt.Errorf("failed to validate config: %w", err)
 			}
 
-			filename := config.ConfigYaml
-			if !filepath.IsAbs(config.ConfigYaml) {
-				filename = filepath.Join(project, config.ConfigYaml)
-			}
 			// initialize config
 			log.Infof("initializing config: %s", filename)
 			err = config.InitWithConfig(filename, cfg)
@@ -142,6 +146,7 @@ Examples:
 			}
 
 			log.Info("project initialized successfully")
+			log.Infof("you can edit '%s' to customize configurations according to your needs", filename)
 			return nil
 		},
 	}
@@ -155,16 +160,16 @@ Examples:
 	cmd.Flags().Int("diff-precision", 1, "Diff precision (1-4)")
 	cmd.Flags().Int("threads", 1, "Number of threads")
 	cmd.Flags().Bool("race", false, "Enable race detection")
-	cmd.Flags().Bool("clone-branch", false, "Clone branch")
 	cmd.Flags().String("goat-package-name", "goat", "Goat package name")
 	cmd.Flags().String("goat-package-alias", "goat", "Goat package alias")
 	cmd.Flags().String("goat-package-path", "goat", "Goat package path")
 	cmd.Flags().String("ignores", "", "Comma-separated list of files/dirs to ignore")
-	cmd.Flags().String("main-entries", "", "Comma-separated list of main entries to track")
+	cmd.Flags().String("main-entries", "", "Comma-separated list of relative paths to main packages from project root (e.g., 'cmd/server,cmd/client' or '*' for all)")
 	cmd.Flags().String("printer-config-mode", "useSpaces,tabIndent", "Printer config mode, list of (none, useSpaces, tabIndent, sourcePos, rawFormat)")
 	cmd.Flags().Int("printer-config-tabwidth", 8, "Printer config tabwidth")
 	cmd.Flags().Int("printer-config-indent", 0, "Printer config indent")
 	cmd.Flags().String("data-type", "truth", "Data type (truth, count, average)")
+	cmd.Flags().Bool("force", false, "Force overwrite existing goat.yaml file")
 
 	return cmd
 }
