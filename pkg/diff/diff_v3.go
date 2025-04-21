@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
 	"github.com/monshunter/goat/pkg/config"
@@ -19,74 +17,29 @@ import (
 //
 // DifferV3 Code DifferV3ence Analyzer
 type DifferV3 struct {
-	cfg       *config.Config
-	repo      *git.Repository
-	oldHash   plumbing.Hash
-	newHash   plumbing.Hash
-	newCommit *object.Commit
-	oldCommit *object.Commit
+	cfg      *config.Config
+	repoInfo *repoInfo
 }
 
 // NewDifferV3 creates a new code DifferV3
 func NewDifferV3(cfg *config.Config) (*DifferV3, error) {
-	repo, err := git.PlainOpen(".")
+	repoInfo, err := newRepoInfo(cfg.OldBranch, cfg.NewBranch)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open git repository: %w", err)
-	}
-	if err := checkUncommittedChanges(repo); err != nil {
-		return nil, fmt.Errorf("failed to check uncommitted changes: %w", err)
+		return nil, fmt.Errorf("failed to create repo info: %w", err)
 	}
 	d := &DifferV3{
-		repo: repo,
-		cfg:  cfg,
+		repoInfo: repoInfo,
+		cfg:      cfg,
 	}
-	oldHash, err := resolveRef(d.repo, cfg.OldBranch)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve old branch: %w", err)
-	}
-
-	newHash, err := resolveRef(d.repo, cfg.NewBranch)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve new branch: %w", err)
-	}
-
-	oldCommit, err := d.repo.CommitObject(oldHash)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get old branch commit: %w", err)
-	}
-
-	newCommit, err := d.repo.CommitObject(newHash)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get new branch commit: %w", err)
-	}
-	d.oldHash = oldHash
-	d.newHash = newHash
-	d.oldCommit = oldCommit
-	d.newCommit = newCommit
 	return d, nil
 }
 
 // AnalyzeChanges analyzes code changes between two branches
 func (d *DifferV3) AnalyzeChanges() ([]*FileChange, error) {
-	// Get trees for both commits
-	oldTree, err := d.oldCommit.Tree()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get old branch tree: %w", err)
-	}
-
-	newTree, err := d.newCommit.Tree()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get new branch tree: %w", err)
-	}
-
-	// Compare trees
-	changes, err := object.DiffTree(oldTree, newTree)
-
+	changes, err := d.repoInfo.getObjectChanges()
 	if err != nil {
 		return nil, fmt.Errorf("failed to compare branch DifferV3ences: %w", err)
 	}
-	// Analyze changes
-	// Process changes concurrently with worker pool
 	fileChanges := make([]*FileChange, len(changes))
 	errChan := make(chan error, len(changes))
 	sem := make(chan struct{}, d.cfg.Threads)
@@ -134,7 +87,6 @@ func (d *DifferV3) analyzeChange(change *object.Change) (*FileChange, error) {
 	}
 	switch action {
 	case merkletrie.Insert, merkletrie.Modify:
-		// fmt.Println("handleInsert", "from", change.From.Name, "to", change.To.Name, action)
 		return d.handleInsert(change)
 	default:
 		return nil, nil

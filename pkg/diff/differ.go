@@ -7,6 +7,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/format/diff"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/monshunter/goat/pkg/config"
 )
 
@@ -35,6 +36,128 @@ func (l LineChanges) Search(line int) int {
 		}
 	}
 	return -1
+}
+
+type repoInfo struct {
+	repo      *git.Repository
+	oldHash   plumbing.Hash
+	newHash   plumbing.Hash
+	oldCommit *object.Commit
+	newCommit *object.Commit
+	commits   map[plumbing.Hash]*object.Commit
+}
+
+// newRepoInfo creates a new repoInfo
+func newRepoInfo(oldBranch, newBranch string) (*repoInfo, error) {
+	repo, err := git.PlainOpen(".")
+	if err != nil {
+		return nil, fmt.Errorf("failed to open git repository: %w", err)
+	}
+
+	if err := checkUncommittedChanges(repo); err != nil {
+		return nil, fmt.Errorf("failed to check uncommitted changes: %w", err)
+	}
+
+	oldHash, err := resolveRef(repo, oldBranch)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve old branch: %w", err)
+	}
+	newHash, err := resolveRef(repo, newBranch)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve new branch: %w", err)
+	}
+
+	oldCommit, err := repo.CommitObject(oldHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get old branch commit: %w", err)
+	}
+
+	newCommit, err := repo.CommitObject(newHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get new branch commit: %w", err)
+	}
+	return &repoInfo{
+		repo:      repo,
+		oldHash:   oldHash,
+		newHash:   newHash,
+		oldCommit: oldCommit,
+		newCommit: newCommit,
+	}, nil
+}
+
+// getOldCommit returns the old commit
+func (r *repoInfo) getOldCommit() *object.Commit {
+	return r.oldCommit
+}
+
+// getNewCommit returns the new commit
+func (r *repoInfo) getNewCommit() *object.Commit {
+	return r.newCommit
+}
+
+// getRepo returns the repository
+func (r *repoInfo) getRepo() *git.Repository {
+	return r.repo
+}
+
+// getOldHash returns the old commit hash
+func (r *repoInfo) getOldHash() plumbing.Hash {
+	return r.oldHash
+}
+
+// getNewHash returns the new commit hash
+func (r *repoInfo) getNewHash() plumbing.Hash {
+	return r.newHash
+}
+
+// getObjectChanges returns the object changes
+func (r *repoInfo) getObjectChanges() (object.Changes, error) {
+	// Get trees for both commits
+	oldTree, err := r.oldCommit.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get old branch tree: %w", err)
+	}
+
+	newTree, err := r.newCommit.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get new branch tree: %w", err)
+	}
+
+	// Compare trees
+	changes, err := object.DiffTree(oldTree, newTree)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compare branch DifferV1ences: %w", err)
+	}
+	return changes, nil
+}
+
+// getFilePatches returns the file patches
+func (r *repoInfo) getFilePatches() ([]diff.FilePatch, error) {
+	patch, err := r.oldCommit.Patch(r.newCommit)
+	if err != nil {
+		return nil, err
+	}
+	// Analyze changes
+	// Process changes concurrently with worker pool
+	filePatches := patch.FilePatches()
+	return filePatches, nil
+}
+
+// loadCommits loads the commits
+func (r *repoInfo) loadCommits() error {
+	if r.commits != nil {
+		return nil
+	}
+	r.commits = make(map[plumbing.Hash]*object.Commit)
+	commits, err := r.repo.CommitObjects()
+	if err != nil {
+		return fmt.Errorf("failed to get commits: %w", err)
+	}
+	commits.ForEach(func(commit *object.Commit) error {
+		r.commits[commit.Hash] = commit
+		return nil
+	})
+	return nil
 }
 
 // resolveRef resolves a reference (branch name or commit hash) to a commit hash

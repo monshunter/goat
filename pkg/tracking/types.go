@@ -496,7 +496,30 @@ func (f *TrackScope) PrepareChildren(fset *token.FileSet) error {
 					node:      &ast.BlockStmt{List: block.Body},
 				})
 			}
-
+		case *ast.SwitchStmt:
+			if block.Body != nil {
+				f.AddChild(TrackScope{
+					StartLine: fset.Position(block.Body.Lbrace).Line,
+					EndLine:   fset.Position(block.Body.Rbrace).Line,
+					node:      block.Body,
+				})
+			}
+		case *ast.TypeSwitchStmt:
+			if block.Body != nil {
+				f.AddChild(TrackScope{
+					StartLine: fset.Position(block.Body.Lbrace).Line,
+					EndLine:   fset.Position(block.Body.Rbrace).Line,
+					node:      block.Body,
+				})
+			}
+		case *ast.SelectStmt:
+			if block.Body != nil {
+				f.AddChild(TrackScope{
+					StartLine: fset.Position(block.Body.Lbrace).Line,
+					EndLine:   fset.Position(block.Body.Rbrace).Line,
+					node:      block.Body,
+				})
+			}
 		}
 	}
 	f.Children.Sort()
@@ -662,6 +685,13 @@ func blockNodesOfFunction(stmts []ast.Stmt) ([]ast.Stmt, error) {
 			blockNodes = append(blockNodes, stmt)
 		case *ast.LabeledStmt:
 			blockNodes = append(blockNodes, stmt.Stmt)
+		case *ast.SwitchStmt:
+			blockNodes = append(blockNodes, stmt)
+		case *ast.SelectStmt:
+			blockNodes = append(blockNodes, stmt)
+		case *ast.TypeSwitchStmt:
+			blockNodes = append(blockNodes, stmt)
+
 		}
 	}
 	return blockNodes, nil

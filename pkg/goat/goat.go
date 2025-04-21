@@ -41,6 +41,15 @@ func debugMainInfo(mainPkgInfo *maininfo.MainInfo) {
 func getDiff(cfg *config.Config) ([]*diff.FileChange, error) {
 	var differ diff.DifferInterface
 	var err error
+	// if the repository is new, use the diff.NewDifferInit
+	if cfg.IsNewRepository() {
+		differ, err = diff.NewDifferInit(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get differ: %v", err)
+		}
+		return differ.AnalyzeChanges()
+	}
+
 	switch cfg.DiffPrecision {
 	case 1:
 		differ, err = diff.NewDifferV1(cfg)

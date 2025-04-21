@@ -239,10 +239,10 @@ type Config struct {
 	AppName string `yaml:"appName"` // goat
 	// App version
 	AppVersion string `yaml:"appVersion"` // 1.0.0
-	// Old branch name (previously StableBranch)
-	OldBranch string `yaml:"oldBranch"` // commit hash or branch name or tag name or .
-	// New branch name (previously PublishBranch)
-	NewBranch string `yaml:"newBranch"` // commit hash or branch name or tag name or .
+	// Old branch name
+	OldBranch string `yaml:"oldBranch"` // valid values: [commit hash, branch name, tag name, "", HEAD, INIT (for new repository)]
+	// New branch name
+	NewBranch string `yaml:"newBranch"` // valid values: [commit hash, branch name, tag name, "", HEAD]
 	// Files or directories to ignore
 	Ignores []string `yaml:"ignores"`
 	// Goat package name
@@ -295,11 +295,11 @@ func (c *Config) Validate() error {
 		c.Threads = runtime.NumCPU()
 	}
 
-	if c.OldBranch == "" || c.OldBranch == "." {
+	if c.OldBranch == "" {
 		c.OldBranch = "main"
 	}
 
-	if c.NewBranch == "" || c.NewBranch == "." {
+	if c.NewBranch == "" {
 		c.NewBranch = "HEAD"
 	}
 
@@ -414,6 +414,10 @@ func (c *Config) GetDataType() DataType {
 		return DataTypeTruth
 	}
 	return dt
+}
+
+func (c *Config) IsNewRepository() bool {
+	return c.OldBranch == "INIT"
 }
 
 // LoadConfig loads configuration from file

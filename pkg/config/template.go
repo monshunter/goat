@@ -17,7 +17,8 @@ appVersion: {{.AppVersion}}
 ## 1. commit hash
 ## 2. branch name
 ## 3. tag name
-## 4. "" or  "." or "HEAD" means the current branch
+## 4. ""  or "HEAD" means the current branch
+## 5. "INIT" means the current repository is a new one, no old branch
 ## default: "main"
 oldBranch: {{.OldBranch}}
 
@@ -26,7 +27,7 @@ oldBranch: {{.OldBranch}}
 ## 1. commit hash
 ## 2. branch name
 ## 3. tag name
-## 4. "" or "." or "HEAD" means the current branch
+## 4. "" or "HEAD" means the current branch
 ## default: "HEAD"
 newBranch: {{.NewBranch}}
 

@@ -19,8 +19,8 @@ func initCmd() *cobra.Command {
 		Long: `The init command is used to initialize a new project in the current directory.
 
 Options:
-  --old <oldBranch>                     Old branch for comparison base (default: "main")
-  --new <newBranch>                     New branch for comparison target (default: "HEAD")
+  --old <oldBranch>                     Old branch for comparison base (default: "main"), valid values: [commit hash, branch name, tag name, "", HEAD, INIT (for new repository)]
+  --new <newBranch>                     New branch for comparison target (default: "HEAD"), valid values: [commit hash, branch name, tag name, "", HEAD]
   --app-name <appName>                  Application name (default: "example-app")
   --app-version <appVersion>            Application version (default: "1.0.0")
   --granularity <granularity>           Granularity (line, block, scope, func) (default: "block")
@@ -152,8 +152,8 @@ Examples:
 	}
 
 	// add command line options
-	cmd.Flags().String("old", "main", "Old branch for comparison base")
-	cmd.Flags().String("new", "HEAD", "New branch for comparison target")
+	cmd.Flags().String("old", "main", "Old branch for comparison base, valid values: [commit hash, branch name, tag name, '', HEAD, INIT (for new repository)]")
+	cmd.Flags().String("new", "HEAD", "New branch for comparison target, valid values: [commit hash, branch name, tag name, '', HEAD]")
 	cmd.Flags().String("app-name", "example-app", "Application name")
 	cmd.Flags().String("app-version", "1.0.0", "Application version")
 	cmd.Flags().String("granularity", "block", "Granularity (line, block, scope, func)")

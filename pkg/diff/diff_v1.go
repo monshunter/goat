@@ -14,90 +14,31 @@ import (
 
 // DifferV1 Code DifferV1ence Analyzer
 type DifferV1 struct {
-	cfg       *config.Config
-	repo      *git.Repository
-	oldHash   plumbing.Hash
-	newHash   plumbing.Hash
-	newCommit *object.Commit
-	oldCommit *object.Commit
-	commits   map[plumbing.Hash]*object.Commit
+	cfg      *config.Config
+	repoInfo *repoInfo
 }
 
 // NewDifferV1 creates a new code DifferV1
 func NewDifferV1(cfg *config.Config) (*DifferV1, error) {
-	repo, err := git.PlainOpen(".")
+	repoInfo, err := newRepoInfo(cfg.OldBranch, cfg.NewBranch)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open git repository: %w", err)
+		return nil, fmt.Errorf("failed to create repo info: %w", err)
 	}
-
-	// Check if there are uncommitted changes
-	if err := checkUncommittedChanges(repo); err != nil {
-		return nil, fmt.Errorf("failed to check uncommitted changes: %w", err)
+	if err := repoInfo.loadCommits(); err != nil {
+		return nil, fmt.Errorf("failed to load commits: %w", err)
 	}
-
 	d := &DifferV1{
-		repo:    repo,
-		cfg:     cfg,
-		commits: make(map[plumbing.Hash]*object.Commit),
+		repoInfo: repoInfo,
+		cfg:      cfg,
 	}
-	// process input
-	// resolve old branch in repo
-	oldHash, err := resolveRef(d.repo, cfg.OldBranch)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve old branch: %w", err)
-	}
-	// resolve new branch in repo
-	newHash, err := resolveRef(d.repo, cfg.NewBranch)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve new branch: %w", err)
-	}
-
-	oldCommit, err := d.repo.CommitObject(oldHash)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get old branch commit: %w", err)
-	}
-
-	newCommit, err := d.repo.CommitObject(newHash)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get new branch commit: %w", err)
-	}
-	d.oldHash = oldHash
-	d.newHash = newHash
-	d.oldCommit = oldCommit
-	d.newCommit = newCommit
-	d.loadCommits()
 	return d, nil
-}
-
-func (d *DifferV1) loadCommits() error {
-	commits, err := d.repo.CommitObjects()
-	if err != nil {
-		return fmt.Errorf("failed to get commits: %w", err)
-	}
-	commits.ForEach(func(commit *object.Commit) error {
-		d.commits[commit.Hash] = commit
-		return nil
-	})
-	return nil
 }
 
 // AnalyzeChanges analyzes code changes between two branches
 func (d *DifferV1) AnalyzeChanges() ([]*FileChange, error) {
-	// Get trees for both commits
-	oldTree, err := d.oldCommit.Tree()
+	changes, err := d.repoInfo.getObjectChanges()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get old branch tree: %w", err)
-	}
-
-	newTree, err := d.newCommit.Tree()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get new branch tree: %w", err)
-	}
-
-	// Compare trees
-	changes, err := object.DiffTree(oldTree, newTree)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compare branch DifferV1ences: %w", err)
+		return nil, fmt.Errorf("failed to get object changes: %w", err)
 	}
 	// Analyze changes
 	// Process changes concurrently with worker pool
@@ -176,7 +117,7 @@ func (d *DifferV1) handleInsert(change *object.Change) (*FileChange, error) {
 // GetLineChanges gets line-level change information for a file, focusing only on incremental code
 func (d *DifferV1) getLineChanges(filepath string) ([]LineChange, error) {
 	// Get file content
-	file, err := d.newCommit.File(filepath)
+	file, err := d.repoInfo.getNewCommit().File(filepath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file: %w", err)
 	}
@@ -186,7 +127,7 @@ func (d *DifferV1) getLineChanges(filepath string) ([]LineChange, error) {
 		return nil, fmt.Errorf("failed to read file content: %w", err)
 	}
 	// Get blame information for the file
-	blame, err := git.Blame(d.newCommit, filepath)
+	blame, err := git.Blame(d.repoInfo.getNewCommit(), filepath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get blame information: %w", err)
 	}
@@ -197,7 +138,7 @@ func (d *DifferV1) getLineChanges(filepath string) ([]LineChange, error) {
 	for i := range lines {
 		line := blame.Lines[i]
 		// Check if current line's commit is after old branch
-		isNewLine := d.isCommitAfterStable(line.Hash, d.oldHash)
+		isNewLine := d.isCommitAfterStable(line.Hash, d.repoInfo.getOldHash())
 		if isNewLine {
 			if currentChange == nil {
 				currentChange = &LineChange{
@@ -234,9 +175,9 @@ func (d *DifferV1) isCommitAfterStable(commitHash plumbing.Hash, oldHash plumbin
 		return false
 	}
 	// Get the commit object
-	commit, ok := d.commits[commitHash]
+	commit, ok := d.repoInfo.commits[commitHash]
 	if !ok {
 		return false
 	}
-	return d.oldCommit.Committer.When.Before(commit.Committer.When)
+	return d.repoInfo.getOldCommit().Committer.When.Before(commit.Committer.When)
 }

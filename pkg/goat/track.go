@@ -90,6 +90,12 @@ func (p *TrackExecutor) initChanges() error {
 	if err != nil {
 		return fmt.Errorf("failed to get code differences: %w", err)
 	}
+	// sort the changes by path
+	// this sort is important for the incremental tracker,
+	// because the incremental tracker will use the changes to generate the tracking points
+	// and the tracking points are sorted by the path
+	// so the tracking points will be in the same order for each time run
+	// the same track between the two same commits
 	sort.Slice(changes, func(i, j int) bool {
 		return changes[i].Path < changes[j].Path
 	})
