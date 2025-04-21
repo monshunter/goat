@@ -262,7 +262,7 @@ func ParseComments(content []byte) (map[int]string, error) {
 	return comments, nil
 }
 
-func FormatAndWrite(filename string, content []byte, cfg *printer.Config) error {
+func FormatAndSave(filename string, content []byte, cfg *printer.Config) error {
 	fset, fileAst, err := GetAstTree("", content)
 	if err != nil {
 		return fmt.Errorf("failed to get ast tree: %v, file: %s", err, filename)

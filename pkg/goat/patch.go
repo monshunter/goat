@@ -2,243 +2,323 @@ package goat
 
 import (
 	"fmt"
-	"sort"
+	"os"
+	"slices"
 	"sync"
 
 	"github.com/monshunter/goat/pkg/log"
 
 	"github.com/monshunter/goat/pkg/config"
-	"github.com/monshunter/goat/pkg/diff"
 	"github.com/monshunter/goat/pkg/maininfo"
-	"github.com/monshunter/goat/pkg/tracking"
 	"github.com/monshunter/goat/pkg/tracking/increament"
 	"github.com/monshunter/goat/pkg/utils"
 )
 
-// PatchExecutor is the executor for the patch
 type PatchExecutor struct {
 	cfg                 *config.Config
-	changes             []*diff.FileChange
 	mainPackageInfos    []maininfo.MainPackageInfo
-	trackers            []tracking.Tracker
 	fileTrackIdStartMap map[string]trackIdxInterval
-	goModule            string
+	// filesContents is the contents of the files
+	filesContents    map[string]string
+	goModule         string
+	goatImportPath   string
+	goatPackageAlias string
+	// changed is true if any `// + goat:delete`, `// + goat:insert` is found
+	changed bool
 }
 
-// NewPatchExecutor creates a new patch executor
 func NewPatchExecutor(cfg *config.Config) *PatchExecutor {
-	return &PatchExecutor{
+	PatchExecutor := &PatchExecutor{
 		cfg:                 cfg,
 		fileTrackIdStartMap: make(map[string]trackIdxInterval),
 		goModule:            config.GoModuleName(),
+		filesContents:       make(map[string]string),
 	}
+	PatchExecutor.goatImportPath = utils.GoatPackageImportPath(PatchExecutor.goModule, PatchExecutor.cfg.GoatPackagePath)
+	PatchExecutor.goatPackageAlias = cfg.GoatPackageAlias
+	return PatchExecutor
 }
 
-// Run runs the patch executor
-func (p *PatchExecutor) Run() error {
-	if err := p.initChanges(); err != nil {
-		return fmt.Errorf("failed to initialize changes: %w", err)
+func (f *PatchExecutor) Run() error {
+	log.Infof("Patching project")
+	if err := f.initMainPackageInfos(); err != nil {
+		log.Errorf("failed to init main package infos: %v", err)
+		return err
+	}
+	if err := f.prepare(); err != nil {
+		log.Errorf("failed to prepare: %v", err)
+		return err
 	}
 
-	if err := p.initMainPackageInfos(); err != nil {
-		return fmt.Errorf("failed to initialize main packages: %w", err)
+	if !f.changed {
+		log.Infof("No files with +goat:delete, +goat:insert found, no need to apply")
+		return nil
 	}
-
-	if err := p.initTracks(); err != nil {
-		return fmt.Errorf("failed to initialize trackers: %w", err)
+	if err := f.apply(); err != nil {
+		log.Errorf("Failed to apply patch: %v", err)
+		return err
 	}
-
-	count, err := p.replaceTracks()
-	if err != nil {
-		return fmt.Errorf("failed to replace tracks: %w", err)
-	}
-
-	log.Debugf("Replaced %d tracking points", count)
-
-	componentTrackIdxs := getComponentTrackIdxs(p.fileTrackIdStartMap, p.mainPackageInfos)
-
-	values := increament.NewValues(p.cfg)
-	for _, component := range componentTrackIdxs {
-		values.AddComponent(component.componentId, component.component, component.trackIdx)
-	}
-
-	values.AddTrackIds(getTotalTrackIdxs(p.fileTrackIdStartMap))
-
-	if err = values.Save(p.cfg.GoatGeneratedFile()); err != nil {
-		return fmt.Errorf("failed to save generated file %s: %w", p.cfg.GoatGeneratedFile(), err)
-	}
-
-	if err := p.saveTracks(); err != nil {
-		return fmt.Errorf("failed to save tracking points: %w", err)
-	}
-
-	if err := applyMainEntry(p.cfg, p.goModule, p.mainPackageInfos, componentTrackIdxs); err != nil {
-		return fmt.Errorf("failed to apply main entry: %w", err)
-	}
-
-	log.Infof("Patch applied successfully with %d tracking points", count)
+	log.Infof("Patch applied")
 	return nil
 }
 
-// initChanges initializes the changes
-func (p *PatchExecutor) initChanges() error {
-	changes, err := getDiff(p.cfg)
+func (f *PatchExecutor) initMainPackageInfos() error {
+	log.Infof("Getting main package infos")
+	mainPkgInfos, err := getMainPackageInfos(".", f.goModule, f.cfg.Ignores)
 	if err != nil {
-		return fmt.Errorf("failed to get code differences: %w", err)
+		return err
 	}
-	sort.Slice(changes, func(i, j int) bool {
-		return changes[i].Path < changes[j].Path
-	})
-
-	p.changes = changes
-	log.Debugf("Found %d file changes", len(changes))
+	f.mainPackageInfos = mainPkgInfos
 	return nil
 }
 
-// initMainPackageInfos initializes the main package infos
-func (p *PatchExecutor) initMainPackageInfos() error {
-	mainPkgInfos, err := getMainPackageInfos(".", p.goModule, p.cfg.Ignores)
+func (f *PatchExecutor) prepare() error {
+	log.Infof("Preparing files")
+	files, err := prepareFiles(f.cfg)
 	if err != nil {
-		return fmt.Errorf("failed to get main package info: %w", err)
+		log.Errorf("Failed to prepare files: %v", err)
+		return err
 	}
-	p.mainPackageInfos = mainPkgInfos
-	log.Debugf("Found %d main packages", len(mainPkgInfos))
+	goatFiles, err := f.prepareContents(files)
+	if err != nil {
+		log.Errorf("Failed to prepare contents: %v", err)
+		return err
+	}
+	f.filesContents = make(map[string]string, len(goatFiles))
+	for _, goatFile := range goatFiles {
+		f.filesContents[goatFile.filename] = goatFile.content
+	}
 	return nil
 }
 
-// initTracks initializes the trackers
-func (p *PatchExecutor) initTracks() error {
-	if p.cfg.Threads == 1 {
-		return p.initTracksSequential()
+func (f *PatchExecutor) prepareContents(files []string) ([]goatFile, error) {
+	if f.cfg.Threads == 1 {
+		return f.prepareContentsSequential(files)
 	}
-	return p.initTracksParallel()
+	return f.prepareContentsParallel(files)
 }
 
-// initTracksSequential initializes the trackers sequentially
-func (p *PatchExecutor) initTracksSequential() error {
-	trackers := make([]tracking.Tracker, len(p.changes))
-	for i, change := range p.changes {
-		tracker, err := p.handleDiffChange(change)
+func (f *PatchExecutor) prepareContentsSequential(files []string) ([]goatFile, error) {
+	goatFiles := make([]goatFile, 0, len(files))
+	for _, file := range files {
+		goatFile, err := f.prepareContent(file)
 		if err != nil {
-			return fmt.Errorf("failed to handle file change %s: %w", change.Path, err)
+			log.Errorf("Failed to prepare content: %v", err)
+			return nil, err
 		}
-		trackers[i] = tracker
+		goatFiles = append(goatFiles, goatFile)
 	}
-
-	p.trackers = trackers
-	log.Debugf("Initialized %d trackers", len(trackers))
-	return nil
+	return goatFiles, nil
 }
 
-// initTracksParallel initializes the trackers in parallel
-func (p *PatchExecutor) initTracksParallel() error {
-	trackers := make([]tracking.Tracker, len(p.changes))
-	sem := make(chan struct{}, p.cfg.Threads)
-	errChan := make(chan error, len(p.changes))
+func (f *PatchExecutor) prepareContentsParallel(files []string) ([]goatFile, error) {
+	goatFiles := make([]goatFile, 0, len(files))
 	wg := sync.WaitGroup{}
-	wg.Add(len(p.changes))
-	for i, change := range p.changes {
+	sem := make(chan struct{}, f.cfg.Threads)
+	errChan := make(chan error, len(files))
+	fileChan := make(chan goatFile, len(files))
+	wg.Add(len(files))
+	for _, file := range files {
 		sem <- struct{}{}
-		go func(i int, change *diff.FileChange) {
+		go func(file string) {
 			defer func() {
 				<-sem
 				wg.Done()
 			}()
-			tracker, err := p.handleDiffChange(change)
+			goatFile, err := f.prepareContent(file)
 			if err != nil {
-				errChan <- fmt.Errorf("failed to handle file change %s: %w", change.Path, err)
+				log.Errorf("Failed to prepare content: %v", err)
+				errChan <- err
 				return
 			}
-			trackers[i] = tracker
-		}(i, change)
+			fileChan <- goatFile
+		}(file)
 	}
 	wg.Wait()
 	close(errChan)
 	for err := range errChan {
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
-	p.trackers = trackers
-	log.Debugf("Initialized %d trackers", len(trackers))
-	return nil
+	close(fileChan)
+	for goatFile := range fileChan {
+		goatFiles = append(goatFiles, goatFile)
+	}
+	return goatFiles, nil
 }
 
-func (p *PatchExecutor) handleDiffChange(change *diff.FileChange) (tracking.Tracker, error) {
-	granularity := p.cfg.GetGranularity()
-	tracker, err := tracking.NewIncreamentTrack(".", change,
-		increament.TrackImportPathPlaceHolder, increament.GetPackageInsertData(),
-		nil, granularity, p.cfg.PrinterConfig())
+func (f *PatchExecutor) prepareContent(file string) (goatFile, error) {
+	var content string
+	contentBytes, err := os.ReadFile(file)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create incremental tracker: %w", err)
+		log.Errorf("Failed to read file: %v", err)
+		return goatFile{}, err
 	}
-	_, err = tracker.Track()
+	updated := false
+	count := 0
+	// handle // + goat:delete
+	count, content, err = handleGoatDelete(f.cfg.PrinterConfig(), string(contentBytes), f.goatImportPath, f.goatPackageAlias)
 	if err != nil {
-		return nil, fmt.Errorf("failed to track file: %w", err)
+		log.Errorf("Failed to handle goat delete: %v", err)
+		return goatFile{}, err
 	}
-	log.Debugf("Successfully tracked file: %s", change.Path)
-	return tracker, nil
-}
-
-// replaceTracks replaces the tracks
-func (p *PatchExecutor) replaceTracks() (int, error) {
-	start := 1
-	importPath := utils.GoatPackageImportPath(p.goModule, p.cfg.GoatPackagePath)
-	for i, tracker := range p.trackers {
-		count, err := tracker.Replace(increament.TrackStmtPlaceHolder, increament.IncreamentReplaceStmt(p.cfg.GoatPackageAlias, start))
-		if err != nil || count != tracker.Count() {
-			return 0, fmt.Errorf("failed to replace statements in %s: expected=%d, actual=%d: %w",
-				tracker.TargetFile(), tracker.Count(), count, err)
+	updated = updated || count > 0
+	f.changed = f.changed || updated
+	// handle // + goat:insert
+	count, content, err = handleGoatInsert(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
+	if err != nil {
+		log.Errorf("Failed to handle goat insert: %v", err)
+		return goatFile{}, err
+	}
+	updated = updated || count > 0
+	f.changed = f.changed || updated
+	// handle // + goat:generate
+	count, content, err = resetGoatGenerate(content)
+	if err != nil {
+		log.Errorf("Failed to reset goat generate: %v", err)
+		return goatFile{}, err
+	}
+	updated = updated || count > 0
+	// handle // + goat:main
+	isMainEntry := false
+	for _, mainPkgInfo := range f.mainPackageInfos {
+		if mainPkgInfo.MainFile == file {
+			isMainEntry = true
+			break
 		}
-		p.fileTrackIdStartMap[p.changes[i].Path] = trackIdxInterval{start: start, end: start + count - 1}
-		start += count
-		_, err = tracker.Replace(fmt.Sprintf("%q", increament.TrackImportPathPlaceHolder),
-			increament.IncreamentReplaceImport(p.cfg.GoatPackageAlias, importPath))
+	}
+	if isMainEntry {
+		count, content, err = resetGoatMain(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
 		if err != nil {
-			return 0, fmt.Errorf("failed to replace import in %s: %w", tracker.TargetFile(), err)
+			log.Errorf("Failed to reset goat main entry: %v", err)
+			return goatFile{}, err
 		}
-		log.Debugf("Replaced %d tracking points in %s", count, tracker.TargetFile())
+		updated = updated || count > 0
+	}
+
+	if !updated {
+		return goatFile{}, nil
+	}
+	return goatFile{
+		filename: file,
+		content:  content,
+	}, nil
+}
+
+func (f *PatchExecutor) replaceTracks() (int, error) {
+	start := 1
+	importPath := utils.GoatPackageImportPath(f.goModule, f.cfg.GoatPackagePath)
+	files := make([]string, 0)
+	for file := range f.filesContents {
+		files = append(files, file)
+	}
+	slices.Sort(files)
+	for _, file := range files {
+		content := f.filesContents[file]
+		count, newContent, err := utils.Replace(content, increament.TrackStmtPlaceHolder,
+			increament.IncreamentReplaceStmt(f.cfg.GoatPackageAlias, start))
+		if err != nil {
+			log.Errorf("Failed to replace track stmt: %v", err)
+			return 0, err
+		}
+		f.fileTrackIdStartMap[file] = trackIdxInterval{start: start, end: start + count - 1}
+		start += count
+		_, newContent, err = utils.Replace(newContent, fmt.Sprintf("%q", increament.TrackImportPathPlaceHolder),
+			increament.IncreamentReplaceImport(f.cfg.GoatPackageAlias, importPath))
+		if err != nil {
+			log.Errorf("Failed to replace track import: %v", err)
+			return 0, err
+		}
+		f.filesContents[file] = newContent
 	}
 	return start - 1, nil
 }
 
-// saveTracks saves the trackers
-func (p *PatchExecutor) saveTracks() error {
-	if p.cfg.Threads == 1 {
-		return p.saveTracksSequential()
+func (f *PatchExecutor) apply() error {
+	log.Infof("Applying patch")
+	count, err := f.replaceTracks()
+	if err != nil {
+		log.Errorf("Failed to replace tracks: %v", err)
+		return err
 	}
-	return p.saveTracksParallel()
-}
+	log.Infof("Total replaced tracks: %d", count)
 
-// saveTracksSequential saves the trackers sequentially
-func (p *PatchExecutor) saveTracksSequential() error {
-	for _, tracker := range p.trackers {
-		if err := tracker.Save(""); err != nil {
-			return fmt.Errorf("failed to save tracker for %s: %w", tracker.TargetFile(), err)
-		}
+	err = f.applyTracks()
+	if err != nil {
+		log.Errorf("Failed to apply tracks: %v", err)
+		return err
 	}
-	log.Debugf("Saved %d tracker files", len(p.trackers))
+
+	// apply goat_generated.go
+	componentTrackIdxs := getComponentTrackIdxs(f.fileTrackIdStartMap, f.mainPackageInfos)
+	values := increament.NewValues(f.cfg)
+	for _, component := range componentTrackIdxs {
+		values.AddComponent(component.componentId, component.component, component.trackIdx)
+	}
+	trackIdxs := getTotalTrackIdxs(f.fileTrackIdStartMap)
+	// remove goat_generated.go if no track idxs
+	if len(trackIdxs) == 0 {
+		err = values.Remove(f.cfg.GoatGeneratedFile())
+		if err != nil {
+			log.Errorf("Failed to remove goat_generated.go: %v", err)
+			return err
+		}
+		return nil
+	}
+
+	values.AddTrackIds(trackIdxs)
+	err = values.Save(f.cfg.GoatGeneratedFile())
+	if err != nil {
+		log.Errorf("Failed to save goat_generated.go: %v", err)
+		return err
+	}
+
+	// apply main entry
+	if err := applyMainEntry(f.cfg, f.goModule, f.mainPackageInfos, componentTrackIdxs); err != nil {
+		log.Errorf("Failed to apply main entry: %v", err)
+		return err
+	}
 	return nil
 }
 
-// saveTracksParallel saves the trackers in parallel
-func (p *PatchExecutor) saveTracksParallel() error {
+func (f *PatchExecutor) applyTracks() error {
+	if f.cfg.Threads == 1 {
+		return f.applyTracksSequential()
+	}
+	return f.applyTracksParallel()
+}
+
+func (f *PatchExecutor) applyTracksSequential() error {
+	for file, content := range f.filesContents {
+		err := utils.FormatAndSave(file, []byte(content), f.cfg.PrinterConfig())
+		if err != nil {
+			log.Errorf("Failed to format and save file: %v", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *PatchExecutor) applyTracksParallel() error {
 	wg := sync.WaitGroup{}
-	wg.Add(len(p.trackers))
-	sem := make(chan struct{}, p.cfg.Threads)
-	errChan := make(chan error, len(p.trackers))
-	for _, tracker := range p.trackers {
+	sem := make(chan struct{}, f.cfg.Threads)
+	errChan := make(chan error, len(f.filesContents))
+	wg.Add(len(f.filesContents))
+	for file, content := range f.filesContents {
 		sem <- struct{}{}
-		go func(tracker tracking.Tracker) {
+		go func(file string, content string) {
 			defer func() {
 				<-sem
 				wg.Done()
 			}()
-			if err := tracker.Save(""); err != nil {
-				errChan <- fmt.Errorf("failed to save tracker for %s: %w", tracker.TargetFile(), err)
+			err := utils.FormatAndSave(file, []byte(content), f.cfg.PrinterConfig())
+			if err != nil {
+				log.Errorf("Failed to format and save file: %v", err)
+				errChan <- err
 				return
 			}
-		}(tracker)
+		}(file, content)
 	}
 	wg.Wait()
 	close(errChan)
@@ -247,6 +327,5 @@ func (p *PatchExecutor) saveTracksParallel() error {
 			return err
 		}
 	}
-	log.Debugf("Saved %d tracker files", len(p.trackers))
 	return nil
 }

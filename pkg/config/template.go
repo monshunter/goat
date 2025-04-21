@@ -37,19 +37,31 @@ goatPackageName: {{.GoatPackageName}}
 ## Goat package alias
 goatPackageAlias: {{.GoatPackageAlias}}
 
-## Goat package path, where goat is installed in your project
+## Goat package path, where goat package is installed in your project
 goatPackagePath: {{.GoatPackagePath}}
 
 ## Granularity ([line, block, scope, func], default: block)
+## granularity = line: Track changes at the line level when the line is modified
+## granularity = block: Track changes at the block level when the block is modified
+## granularity = scope: Track changes at the scope level when the scope is modified
+## granularity = func: Track changes at the function level when the function is modified
 granularity: {{.Granularity}}
 
-## Diff precision (1~2, default: 1)
+## Diff precision (1~3, default: 1)
+## diffPrecision = 1: Uses git blame to get file change history and generates tracking information based on it,
+## highest precision, worst performance
+## diffPrecision = 2: Uses git diff to get file change history and generates tracking information (tracks file
+## renames or moves), medium precision, better performance
+## diffPrecision = 3: Uses git diff to get file change history and generates tracking information (cannot track
+## file renames or moves), lowest precision, best performance
 diffPrecision: {{.DiffPrecision}}
 
 ## Threads (default: 1)
 threads: {{.Threads}}
 
 ## Race (default: false)
+## race: true, enable race detection, performance worse
+## race: false, disable race detection, performance better
 race: {{.Race}}
 
 ## Main entries to track (default: all)

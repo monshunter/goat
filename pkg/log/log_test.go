@@ -128,6 +128,11 @@ func TestFatalStackTrace(t *testing.T) {
 		}
 	}
 
+	// 启用栈跟踪
+	oldStackTraceEnabled := IsStackTraceEnabled()
+	defer func() { EnableStackTrace(oldStackTraceEnabled) }()
+	EnableStackTrace(true)
+
 	// Call Fatal with a test message
 	Fatal("test fatal error")
 

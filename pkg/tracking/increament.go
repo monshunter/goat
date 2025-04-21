@@ -83,9 +83,8 @@ func NewIncreamentTrack(basePath string, fileChange *diff.FileChange,
 		return nil, fmt.Errorf("failed to analyze tracking scopes in %s: %w", fileName, err)
 	}
 
-	log.Debugf("tracking file: %s (blocks=%d, funcs=%d, trackScopes=%d)",
+	log.Debugf("Tracking file: %s (blocks=%d, funcs=%d, trackScopes=%d)",
 		fileName, len(blockScopes), len(functionScopes), len(trackScopes))
-	log.Debugf("start tracking file: %s", fileName)
 
 	return &IncreamentTrack{
 		basePath:                    basePath,
@@ -211,12 +210,12 @@ func (t *IncreamentTrack) doInsert() ([]byte, error) {
 	}
 	newFset, newF, err := utils.GetAstTree("", t.content)
 	if err != nil {
-		log.Errorf("failed to get ast tree, file: %s, error: %v", t.fileName, err)
+		log.Errorf("Failed to get ast tree, file: %s, error: %v", t.fileName, err)
 		return nil, err
 	}
 	content, err := utils.FormatAst(t.printerConfig, newFset, newF)
 	if err != nil {
-		log.Errorf("failed to format ast, file: %s, error: %v", t.fileName, err)
+		log.Errorf("Failed to format ast, file: %s, error: %v", t.fileName, err)
 		return nil, err
 	}
 	t.content = content
@@ -402,14 +401,14 @@ func (t *IncreamentTrack) Track() (int, error) {
 	t.insertedPositions.Reset()
 	t.singleLineInsertedPositions.Reset()
 	clear(t.visitedInsertedPositions)
-	log.Debugf("adding tracking to file: %s", t.fileName)
+	log.Debugf("Adding tracking to file: %s", t.fileName)
 	_, err = t.addStmts()
 	if err != nil {
 		return 0, fmt.Errorf("failed to add tracking statements to %s: %w", t.fileName, err)
 	}
 	if t.count > 0 {
 		// do default insert
-		log.Debugf("adding default import to file: %s", t.fileName)
+		log.Debugf("Adding default import to file: %s", t.fileName)
 		t.insertedPositions.Reset()
 		t.singleLineInsertedPositions.Reset()
 		clear(t.visitedInsertedPositions)
@@ -421,19 +420,19 @@ func (t *IncreamentTrack) Track() (int, error) {
 		t.content = content
 
 		// do provider insert
-		log.Debugf("adding provider import to file: %s", t.fileName)
+		log.Debugf("Adding provider import to file: %s", t.fileName)
 		t.insertedPositions.Reset()
 		t.singleLineInsertedPositions.Reset()
 		clear(t.visitedInsertedPositions)
 		pkgPath, alias := t.provider.ImportSpec()
 		content, err = utils.AddImport(t.printerConfig, pkgPath, alias, t.fileName, t.content)
 		if err != nil {
-			log.Errorf("failed to add import: %v", err)
+			log.Errorf("Failed to add import: %v", err)
 			return 0, err
 		}
 		t.content = content
 	}
-	log.Debugf("added %d tracking points to %s", t.count, t.fileName)
+	log.Debugf("Added %d tracking points to %s", t.count, t.fileName)
 	return t.count, nil
 }
 
@@ -463,14 +462,14 @@ func (t *IncreamentTrack) Save(path string) error {
 	perm := os.FileMode(0644)
 	if path == "" {
 		path = t.fileName
-		log.Debugf("applying tracking to file: %s", path)
+		log.Debugf("Applying tracking to file: %s", path)
 		fileInfo, err := os.Stat(path)
 		if err != nil {
-			log.Errorf("failed to get file info: %v, file: %s", err, path)
+			log.Errorf("Failed to get file info: %v, file: %s", err, path)
 			return err
 		}
 		if fileInfo.IsDir() {
-			log.Errorf("path is a directory: %s", path)
+			log.Errorf("Path is a directory: %s", path)
 			return fmt.Errorf("path is a directory: %s", path)
 		}
 		perm = fileInfo.Mode().Perm()
@@ -479,7 +478,7 @@ func (t *IncreamentTrack) Save(path string) error {
 }
 
 func (t *IncreamentTrack) addStmts() ([]byte, error) {
-	log.Debugf("adding tracking to file: %s", t.fileName)
+	log.Debugf("Adding tracking to file: %s", t.fileName)
 	fset, f, err := utils.GetAstTree("", t.content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse file %s: %w", t.fileName, err)

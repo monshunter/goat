@@ -48,8 +48,6 @@ func getDiff(cfg *config.Config) ([]*diff.FileChange, error) {
 		differ, err = diff.NewDifferV2(cfg)
 	case 3:
 		differ, err = diff.NewDifferV3(cfg)
-	case 4:
-		differ, err = diff.NewDifferV4(cfg)
 	default:
 		return nil, fmt.Errorf("invalid diff precision: %d", cfg.DiffPrecision)
 	}

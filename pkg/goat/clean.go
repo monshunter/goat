@@ -10,10 +10,6 @@ import (
 	"github.com/monshunter/goat/pkg/utils"
 )
 
-func RunClean(cfg *config.Config) error {
-	return nil
-}
-
 type CleanExecutor struct {
 	cfg              *config.Config
 	goatImportPath   string
@@ -32,21 +28,21 @@ func NewCleanExecutor(cfg *config.Config) *CleanExecutor {
 }
 
 func (e *CleanExecutor) Run() error {
-	log.Infof("preparing files")
+	log.Infof("Cleaning project")
 	if err := e.prepare(); err != nil {
 		log.Errorf("failed to prepare: %v", err)
 		return err
 	}
-	log.Infof("cleaning files")
 	if err := e.clean(); err != nil {
 		log.Errorf("failed to clean: %v", err)
 		return err
 	}
-	log.Infof("cleaned files")
+	log.Infof("Cleaned project")
 	return nil
 }
 
 func (e *CleanExecutor) prepare() error {
+	log.Infof("Preparing files")
 	var err error
 	files, err := prepareFiles(e.cfg)
 	if err != nil {
@@ -57,7 +53,7 @@ func (e *CleanExecutor) prepare() error {
 		log.Errorf("failed to prepare contents: %v", err)
 		return err
 	}
-	log.Infof("prepared %d files", len(e.files))
+	log.Infof("Prepared %d files", len(e.files))
 	return nil
 }
 
@@ -245,6 +241,7 @@ func (e *CleanExecutor) prepareContent(filename string) (string, bool, error) {
 }
 
 func (e *CleanExecutor) clean() error {
+	log.Infof("Cleaning contents")
 	var err error
 	if e.cfg.Threads == 1 {
 		err = e.cleanContentsSequential()
@@ -256,18 +253,18 @@ func (e *CleanExecutor) clean() error {
 		return err
 	}
 
-	log.Infof("total cleaned files: %d", len(e.files))
-	log.Debugf("removing goat generated file: %s", e.cfg.GoatGeneratedFile())
+	log.Infof("Total cleaned files: %d", len(e.files))
+	log.Debugf("Removing goat generated file: %s", e.cfg.GoatGeneratedFile())
 	os.Remove(e.cfg.GoatGeneratedFile())
 	// remove goat package if empty
-	log.Debugf("checking if goat package is empty: %s", e.cfg.GoatPackagePath)
+	log.Debugf("Checking if goat package is empty: %s", e.cfg.GoatPackagePath)
 	empty, err := utils.IsDirEmpty(e.cfg.GoatPackagePath)
 	if err != nil {
 		log.Errorf("failed to check if goat package is empty: %v", err)
 		return err
 	}
 	if empty {
-		log.Debugf("removing goat package: %s", e.cfg.GoatPackagePath)
+		log.Debugf("Removing goat package: %s", e.cfg.GoatPackagePath)
 		os.RemoveAll(e.cfg.GoatPackagePath)
 	}
 	return nil
@@ -275,10 +272,10 @@ func (e *CleanExecutor) clean() error {
 
 func (e *CleanExecutor) cleanContentsSequential() error {
 	for _, file := range e.files {
-		log.Debugf("cleaning file: %s", file.filename)
-		err := utils.FormatAndWrite(file.filename, []byte(file.content), e.cfg.PrinterConfig())
+		log.Debugf("Cleaning file: %s", file.filename)
+		err := utils.FormatAndSave(file.filename, []byte(file.content), e.cfg.PrinterConfig())
 		if err != nil {
-			log.Errorf("failed to format and write file: %v", err)
+			log.Errorf("Failed to format and save file: %v", err)
 			return err
 		}
 	}
@@ -321,10 +318,10 @@ func (e *CleanExecutor) cleanContentsParallel() error {
 				<-sem
 				wg.Done()
 			}()
-			log.Debugf("cleaning file: %s", file.filename)
-			err := utils.FormatAndWrite(file.filename, []byte(file.content), e.cfg.PrinterConfig())
+			log.Debugf("Cleaning file: %s", file.filename)
+			err := utils.FormatAndSave(file.filename, []byte(file.content), e.cfg.PrinterConfig())
 			if err != nil {
-				log.Errorf("failed to format and write file: %v", err)
+				log.Errorf("Failed to format and save file: %v", err)
 				errChan <- err
 				return
 			}

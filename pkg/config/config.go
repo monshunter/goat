@@ -254,7 +254,7 @@ type Config struct {
 	// Granularity
 	Granularity string `yaml:"granularity"` // line, block, scope, func
 	// Diff precision
-	DiffPrecision int `yaml:"diffPrecision"` // 1~2, 3&4 is not supported
+	DiffPrecision int `yaml:"diffPrecision"` // valid values: 1~3
 	// Threads
 	Threads int `yaml:"threads"` // 1~128
 	// Race
@@ -287,7 +287,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid granularity: %w", err)
 	}
 
-	if c.DiffPrecision < 1 || c.DiffPrecision > 2 {
+	if c.DiffPrecision < 1 || c.DiffPrecision > 3 {
 		return fmt.Errorf("invalid diff precision: %d", c.DiffPrecision)
 	}
 

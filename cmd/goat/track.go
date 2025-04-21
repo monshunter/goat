@@ -11,18 +11,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func fixCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "fix",
-		Short: "Process manual instrumentation markers in the project",
-		Long: `The fix command is used to process manual instrumentation markers in the project.
+func trackCmd() *cobra.Command {
 
-It primarily handles:
-  - // +goat:delete markers - removes code segments marked for deletion
-  - // +goat:insert markers - inserts code at marked positions
+	cmd := &cobra.Command{
+		Use:   "track",
+		Short: "Insert instrumentation code for the project",
+		Long: `The track command is used to analyze incremental code of the project and insert instrumentation.
+
+Options:
+   None
 
 Examples:
-  goat fix`,
+	goat track`,
 		Args: cobra.ExactArgs(0),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if _, err := os.Stat(config.ConfigYaml); os.IsNotExist(err) {
@@ -36,25 +36,29 @@ Examples:
 				log.Errorf("failed to load config: %v", err)
 				return err
 			}
-			executor := goat.NewFixExecutor(cfg)
-			if err := executor.Run(); err != nil {
+			// check if the project is already patched
+			if _, err := os.Stat(cfg.GoatGeneratedFile()); err == nil {
+				return fmt.Errorf("project is already patched, please run `goat clean` first")
+			}
+
+			executor := goat.NewTrackExecutor(cfg)
+			err = executor.Run()
+			if err != nil {
 				return err
 			}
 
 			// 显示成功提示和后续建议
 			log.Info("----------------------------------------------------------")
-			log.Info("✅ Fix completed successfully!")
-			log.Info("Manual markers have been processed (// +goat:delete, // +goat:insert)")
+			log.Info("✅ Track completed successfully!")
 			log.Info("You can:")
 			log.Info("- Review the changes using git diff or your preferred diff tool")
-			log.Info("- Build and test your application to verify the changes")
-			log.Info("- Add more manual markers and run 'goat fix' again if needed")
-			log.Info("- If you want to remove all instrumentation, run 'goat clean'")
+			log.Info("- Build and test your application to verify instrumentation")
+			log.Info("- If you manualy add or remove instrumentation, run 'goat patch' to update the instrumentation")
+			log.Info("- To remove all instrumentation, run 'goat clean'")
 			log.Info("----------------------------------------------------------")
 
 			return nil
 		},
 	}
-
 	return cmd
 }

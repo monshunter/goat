@@ -10,18 +10,31 @@ import (
 )
 
 var verbose bool
+var showVersion bool
 
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "goat",
 		Short: "Goat is a tool for analyzing and instrumenting Go programs",
 		Long:  `Goat is a tool for analyzing and instrumenting Go programs`,
+		Run: func(cmd *cobra.Command, args []string) {
+			if showVersion {
+				fmt.Printf("Goat version %s\n", Version)
+				return
+			}
+			cmd.Help()
+		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Set the verbose mode for the log
 			log.SetVerbose(verbose)
 
 			// Skip project checks for help or version commands
 			if cmd.Name() == "help" || cmd.Name() == "version" {
+				return nil
+			}
+
+			// Skip project checks when showing version
+			if showVersion {
 				return nil
 			}
 
@@ -34,7 +47,7 @@ func main() {
 				return fmt.Errorf("current directory is not a git repository")
 			}
 
-			log.Infof("start to run %s command", cmd.Name())
+			log.Infof("Start to run %s command", cmd.Name())
 			return nil
 		},
 	}
@@ -44,11 +57,13 @@ func main() {
 
 	// Add global persistent flags
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
+	rootCmd.Flags().BoolVar(&showVersion, "version", false, "show version information")
 
 	rootCmd.AddCommand(initCmd())
+	rootCmd.AddCommand(trackCmd())
 	rootCmd.AddCommand(patchCmd())
-	rootCmd.AddCommand(fixCmd())
 	rootCmd.AddCommand(cleanCmd())
+	rootCmd.AddCommand(versionCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalf("failed to execute root command: %v", err)

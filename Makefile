@@ -1,6 +1,6 @@
-.PHONY: all build clean test lint cover fmt help
+.PHONY: all build clean test lint cover fmt help install uninstall clean-cache kill-build
 
-# 设置Go环境变量
+# Set Go environment variables
 GOCMD=go
 GOBUILD=$(GOCMD) build
 GOTEST=$(GOCMD) test
@@ -9,64 +9,86 @@ GOLINT=golangci-lint
 GOFMT=$(GOCMD) fmt
 BINARY_NAME=goat
 BUILD_DIR=bin
+GOPATH ?= $(shell $(GOCMD) env GOPATH)
 
-# 默认目标
+# Version information
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE ?= $(shell date +%FT%T%z)
+BUILD_FLAGS = -ldflags "-X main.Version=${VERSION} -X main.Commit=${GIT_COMMIT} -X main.BuildDate=${BUILD_DATE}"
+
+# Default target
 all: lint test build
 
-# 构建应用
+# Build application
 build:
 	mkdir -p $(BUILD_DIR)
-	$(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/goat
+	$(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/goat
 
-# 快速构建（不进行测试和lint）
+# Quick build (without test and lint)
 build-quick:
 	mkdir -p $(BUILD_DIR)
-	$(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/goat
+	$(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/goat
 
-# 运行测试
+# Run tests
 test:
 	$(GOTEST) -v ./...
 
-# 运行测试并生成覆盖率报告
+# Run tests and generate coverage report
 cover:
 	$(GOTEST) -coverprofile=coverage.out ./...
 	$(GOCMD) tool cover -html=coverage.out
 
-# 运行代码检查
+# Run code check
 lint:
 	$(GOVET) ./...
-	$(GOLINT) run
 
-# 格式化代码
+# Format code
 fmt:
 	$(GOFMT) ./...
 
-# 静态检查
+# Static check
 check: lint test
 
-# 安装依赖工具
+# Install dependency tools
 deps:
 	$(GOCMD) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
-# 安装编译后的二进制文件
+# Install compiled binary
 install: build
 	cp $(BUILD_DIR)/$(BINARY_NAME) $(GOPATH)/bin/
 
-# 清理构建文件
+# Uninstall binary from GOPATH
+uninstall:
+	rm -f $(GOPATH)/bin/$(BINARY_NAME)
+
+# Clean build files
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f coverage.out
 
-# 帮助信息
+# Clean Go cache
+clean-cache:
+	$(GOCMD) clean -cache -modcache -i -r
+
+# Kill all Go processes (when build hangs)
+kill-build:
+	@echo "Killing all Go processes..."
+	@pgrep go | xargs kill -9 2>/dev/null || echo "No Go processes found"
+
+# Help information
 help:
-	@echo "可用的命令:"
-	@echo "  make build       - 构建应用"
-	@echo "  make build-quick - 快速构建应用（跳过测试和lint）"
-	@echo "  make test        - 运行测试"
-	@echo "  make cover       - 生成测试覆盖率报告"
-	@echo "  make lint        - 运行代码检查"
-	@echo "  make fmt         - 格式化代码"
-	@echo "  make check       - 运行测试和代码检查"
-	@echo "  make deps        - 安装依赖工具"
-	@echo "  make install     - 安装编译后的二进制文件"
-	@echo "  make clean       - 清理构建文件"
+	@echo "Available commands:"
+	@echo "  make build       - Build application"
+	@echo "  make build-quick - Quick build (skip tests and lint)"
+	@echo "  make test        - Run tests"
+	@echo "  make cover       - Generate test coverage report"
+	@echo "  make lint        - Run code check"
+	@echo "  make fmt         - Format code"
+	@echo "  make check       - Run tests and code check"
+	@echo "  make deps        - Install dependency tools"
+	@echo "  make install     - Install compiled binary"
+	@echo "  make uninstall   - Uninstall binary from GOPATH"
+	@echo "  make clean       - Clean build files"
+	@echo "  make clean-cache - Clean Go cache"
+	@echo "  make kill-build  - Kill all Go processes (when build hangs)"

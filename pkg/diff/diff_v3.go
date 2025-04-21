@@ -1,7 +1,6 @@
 package diff
 
 import (
-	"context"
 	"fmt"
 	"sync"
 
@@ -13,8 +12,11 @@ import (
 	"github.com/monshunter/goat/pkg/utils"
 )
 
-// Due to go-git, this version will panic in a multi-threaded scenario.
-// https://github.com/go-git/go-git/pull/186
+// This version cannot recognize the scenario of file migration and modification.
+// All migrated files are regarded as deleted and newly created.
+//
+//	Blame the limited capabilities of go-git. I have tried various methods but still got no result.
+//
 // DifferV3 Code DifferV3ence Analyzer
 type DifferV3 struct {
 	cfg           *config.Config
@@ -31,11 +33,9 @@ func NewDifferV3(cfg *config.Config) (*DifferV3, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
-
 	if err := checkUncommittedChanges(repo); err != nil {
 		return nil, fmt.Errorf("failed to check uncommitted changes: %w", err)
 	}
-
 	d := &DifferV3{
 		repo: repo,
 		cfg:  cfg,
@@ -80,8 +80,8 @@ func (d *DifferV3) AnalyzeChanges() ([]*FileChange, error) {
 	}
 
 	// Compare trees
-	// changes, err := object.DiffTree(stableTree, publishTree)
-	changes, err := object.DiffTreeWithOptions(context.Background(), stableTree, publishTree, object.DefaultDiffTreeOptions)
+	changes, err := object.DiffTree(stableTree, publishTree)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to compare branch DifferV3ences: %w", err)
 	}
@@ -89,7 +89,7 @@ func (d *DifferV3) AnalyzeChanges() ([]*FileChange, error) {
 	// Process changes concurrently with worker pool
 	fileChanges := make([]*FileChange, len(changes))
 	errChan := make(chan error, len(changes))
-	sem := make(chan struct{}, d.cfg.Threads) // concurrent workers,default 10
+	sem := make(chan struct{}, d.cfg.Threads)
 	var wg sync.WaitGroup
 	wg.Add(len(changes))
 	for i, change := range changes {
@@ -123,12 +123,18 @@ func (d *DifferV3) AnalyzeChanges() ([]*FileChange, error) {
 
 // analyzeChange analyzes a single file change
 func (d *DifferV3) analyzeChange(change *object.Change) (*FileChange, error) {
+
 	action, err := change.Action()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get change action: %w", err)
 	}
+
+	if change.From.Name != change.To.Name && change.From.Name != "" && change.To.Name != "" {
+		return nil, nil
+	}
 	switch action {
 	case merkletrie.Insert, merkletrie.Modify:
+		// fmt.Println("handleInsert", "from", change.From.Name, "to", change.To.Name, action)
 		return d.handleInsert(change)
 	default:
 		return nil, nil

@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	{{ end -}}
 	"sort"
+	"strconv"
+	"strings"
 )
 
 // application version
@@ -160,9 +162,9 @@ func ServeHTTP(component Component) {
 		if os.Getenv("GOAT_PORT") != "" {
 			port = os.Getenv("GOAT_PORT")
 		}
-		expose := os.Getenv("GOAT_EXPOSE")
+		expose := os.Getenv("GOAT_METRICS_IP")
 		if expose == "" {
-			expose = "0.0.0.0"
+			expose = "127.0.0.1"
 		}
 		addr := fmt.Sprintf("%s:%s", expose, port)
 		log.Printf("Goat track service started: http://%s\n", addr)
@@ -175,22 +177,32 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	cms := components
-	component := r.URL.Query().Get("component")
-	if component != "" {
-		componentIdx, ok := componentNamesMap[component]
-		if !ok {
-			http.Error(w, "invalid component", http.StatusBadRequest)
-			return
+	componentStr := r.URL.Query().Get("component")
+	if componentStr != "" {
+		componentSlice := strings.Split(componentStr, ",")
+		cms = make([]Component, 0, len(componentSlice))
+		for _, componentStr := range componentSlice {
+			componentIdx, ok := componentNamesMap[componentStr]
+			if !ok {
+				// check if it is a number
+				componentIdx, err := strconv.Atoi(componentStr)
+				if err != nil || componentIdx < 0 || componentIdx >= len(components) {
+					http.Error(w, "invalid component", http.StatusBadRequest)
+					return
+				}
+				cms = append(cms, Component(componentIdx))
+				continue
+			}
+			cms = append(cms, componentIdx)
 		}
-		cms = []Component{componentIdx}
 	}
 
 	results := make([]ComponentResult, 0, len(cms))
 	for _, component := range cms {
 		covered := 0
-		idxs := COMPONENT_TRACK_IDS[component]
-		items := make(Items, 0, len(idxs))
-		for _, id := range idxs {
+		componentTrackIds := COMPONENT_TRACK_IDS[component]
+		items := make(Items, 0, len(componentTrackIds))
+		for _, id := range componentTrackIds {
 			{{ if .Race -}}
 			count := atomic.LoadUint32(&trackIdStatus[id])
 			{{- else -}}
@@ -205,11 +217,14 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 		sort.Slice(items, func(i, j int) bool {
 			return items[i].Count < items[j].Count
 		})
-
+		coveredRate := 0
+		if len(componentTrackIds) > 0 {
+			coveredRate = covered * 100 / len(componentTrackIds)
+		}
 		results = append(results, ComponentResult{
 			ID:      component,
 			Name:    GetComponentName(component),
-			Metrics: Metrics{Total: len(idxs), Covered: covered, CoveredRate: covered * 100 / len(idxs), Items: items},
+			Metrics: Metrics{Total: len(componentTrackIds), Covered: covered, CoveredRate: coveredRate, Items: items},
 		})
 	}
 	// output JSON
