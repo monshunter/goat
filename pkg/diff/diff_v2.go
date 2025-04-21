@@ -14,12 +14,12 @@ import (
 
 // DifferV2 Code DifferV2ence Analyzer
 type DifferV2 struct {
-	cfg           *config.Config
-	repo          *git.Repository
-	stableHash    plumbing.Hash
-	publishHash   plumbing.Hash
-	publishCommit *object.Commit
-	stableCommit  *object.Commit
+	cfg       *config.Config
+	repo      *git.Repository
+	oldHash   plumbing.Hash
+	newHash   plumbing.Hash
+	newCommit *object.Commit
+	oldCommit *object.Commit
 }
 
 // NewDifferV2 creates a new code DifferV2
@@ -35,29 +35,29 @@ func NewDifferV2(cfg *config.Config) (*DifferV2, error) {
 		repo: repo,
 		cfg:  cfg,
 	}
-	stableHash, err := resolveRef(d.repo, cfg.StableBranch)
+	oldHash, err := resolveRef(d.repo, cfg.OldBranch)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve stable branch: %w", err)
+		return nil, fmt.Errorf("failed to resolve old branch: %w", err)
 	}
 
-	publishHash, err := resolveRef(d.repo, cfg.PublishBranch)
+	newHash, err := resolveRef(d.repo, cfg.NewBranch)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve publish branch: %w", err)
+		return nil, fmt.Errorf("failed to resolve new branch: %w", err)
 	}
 
-	stableCommit, err := d.repo.CommitObject(stableHash)
+	oldCommit, err := d.repo.CommitObject(oldHash)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get stable branch commit: %w", err)
+		return nil, fmt.Errorf("failed to get old branch commit: %w", err)
 	}
 
-	publishCommit, err := d.repo.CommitObject(publishHash)
+	newCommit, err := d.repo.CommitObject(newHash)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get publish branch commit: %w", err)
+		return nil, fmt.Errorf("failed to get new branch commit: %w", err)
 	}
-	d.stableHash = stableHash
-	d.publishHash = publishHash
-	d.stableCommit = stableCommit
-	d.publishCommit = publishCommit
+	d.oldHash = oldHash
+	d.newHash = newHash
+	d.oldCommit = oldCommit
+	d.newCommit = newCommit
 	return d, nil
 }
 
@@ -91,7 +91,7 @@ func NewDifferV2(cfg *config.Config) (*DifferV2, error) {
 //    - Could be combined with blame approach for best results
 
 func (d *DifferV2) AnalyzeChanges() ([]*FileChange, error) {
-	patch, err := d.stableCommit.Patch(d.publishCommit)
+	patch, err := d.oldCommit.Patch(d.newCommit)
 	if err != nil {
 		// TODO: return err
 		return nil, err

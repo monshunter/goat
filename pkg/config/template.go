@@ -12,19 +12,23 @@ appName: {{.AppName}}
 ## App version
 appVersion: {{.AppVersion}}
 
-## Stable branch, the valid values are:
+## Old branch name (for comparison base)
+## Valid values are:
 ## 1. commit hash
 ## 2. branch name
 ## 3. tag name
-## 4. "." or "HEAD" means the current branch
-stableBranch: {{.StableBranch}}
+## 4. "" or  "." or "HEAD" means the current branch
+## default: "main"
+oldBranch: {{.OldBranch}}
 
-## Publish branch, the valid values are:
+## New branch name (for comparison target)
+## Valid values are:
 ## 1. commit hash
 ## 2. branch name
 ## 3. tag name
-## 4. "." or "HEAD" means the current branch
-publishBranch: {{.PublishBranch}}
+## 4. "" or "." or "HEAD" means the current branch
+## default: "HEAD"
+newBranch: {{.NewBranch}}
 
 ## Ignore files and directories
 ignores:{{range .Ignores}}

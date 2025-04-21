@@ -60,7 +60,7 @@ func Track(id trackId) {
 		   {{ if eq .DataType 1 -}}
 			atomic.StoreUint32(&trackIdStatus[id], 1)
 			{{- else -}}
-			atomic.AndUint32(&trackIdStatus[id], 1)
+			atomic.AddUint32(&trackIdStatus[id], 1)
 			{{- end -}}
 		{{- else -}}
 			{{ if eq .DataType 1 -}}
@@ -168,6 +168,14 @@ func ServeHTTP(component Component) {
 		}
 		addr := fmt.Sprintf("%s:%s", expose, port)
 		log.Printf("Goat track service started: http://%s\n", addr)
+		// Tips how to use
+		log.Printf("Goat track all components: http://%s/metrics\n", addr)
+		log.Printf("Goat track component: http://%s/metrics?component=COMPONENT_ID\n", addr)
+		log.Printf("Goat track components: http://%s/metrics?component=COMPONENT_ID,COMPONENT_ID2\n", addr)
+		log.Printf("Goat track order by count asc: http://%s/metrics?component=COMPONENT_ID&order=0\n", addr)
+		log.Printf("Goat track order by count desc: http://%s/metrics?component=COMPONENT_ID&order=1\n", addr)
+		log.Printf("Goat track order by id asc: http://%s/metrics?component=COMPONENT_ID&order=2\n", addr)
+		log.Printf("Goat track order by id desc: http://%s/metrics?component=COMPONENT_ID&order=3\n", addr)
 		log.Fatal(http.ListenAndServe(addr, system))
 	}()
 }
@@ -176,6 +184,16 @@ func ServeHTTP(component Component) {
 func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	// invalid order:
+	// order=0: count asc (default)
+	// order=1: count desc
+	// order=2: id asc
+	// order=3: id desc
+	orderStr := r.URL.Query().Get("order")
+	order, err := strconv.Atoi(orderStr)
+	if err != nil || order < 0 || order > 3 {
+		order = 0
+	}
 	cms := components
 	componentStr := r.URL.Query().Get("component")
 	if componentStr != "" {
@@ -214,9 +232,24 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		sort.Slice(items, func(i, j int) bool {
-			return items[i].Count < items[j].Count
-		})
+		switch order {
+		case 0:
+			sort.Slice(items, func(i, j int) bool {
+				return items[i].Count < items[j].Count
+			})
+		case 1:
+			sort.Slice(items, func(i, j int) bool {
+				return items[i].Count > items[j].Count
+			})
+		case 2:
+			sort.Slice(items, func(i, j int) bool {
+				return items[i].ID < items[j].ID
+			})
+		case 3:
+			sort.Slice(items, func(i, j int) bool {
+				return items[i].ID > items[j].ID
+			})
+		}
 		coveredRate := 0
 		if len(componentTrackIds) > 0 {
 			coveredRate = covered * 100 / len(componentTrackIds)

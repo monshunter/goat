@@ -239,10 +239,10 @@ type Config struct {
 	AppName string `yaml:"appName"` // goat
 	// App version
 	AppVersion string `yaml:"appVersion"` // 1.0.0
-	// Stable branch name
-	StableBranch string `yaml:"stableBranch"` // commit hash or branch name or tag name or .
-	// Publish branch name
-	PublishBranch string `yaml:"publishBranch"` // commit hash or branch name or tag name or .
+	// Old branch name (previously StableBranch)
+	OldBranch string `yaml:"oldBranch"` // commit hash or branch name or tag name or .
+	// New branch name (previously PublishBranch)
+	NewBranch string `yaml:"newBranch"` // commit hash or branch name or tag name or .
 	// Files or directories to ignore
 	Ignores []string `yaml:"ignores"`
 	// Goat package name
@@ -295,12 +295,12 @@ func (c *Config) Validate() error {
 		c.Threads = runtime.NumCPU()
 	}
 
-	if c.StableBranch == "" {
-		c.StableBranch = "main"
+	if c.OldBranch == "" || c.OldBranch == "." {
+		c.OldBranch = "main"
 	}
 
-	if c.PublishBranch == "" {
-		c.PublishBranch = "HEAD"
+	if c.NewBranch == "" || c.NewBranch == "." {
+		c.NewBranch = "HEAD"
 	}
 
 	if c.Ignores == nil {

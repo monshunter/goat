@@ -19,8 +19,8 @@ func initCmd() *cobra.Command {
 		Long: `The init command is used to initialize a new project in the current directory.
 
 Options:
-  --stable <stableBranch>               Stable branch (default: "main")
-  --publish <publishBranch>             Publish branch (default: ".")
+  --old <oldBranch>                     Old branch for comparison base (default: "main")
+  --new <newBranch>                     New branch for comparison target (default: "HEAD")
   --app-name <appName>                  Application name (default: "example-app")
   --app-version <appVersion>            Application version (default: "1.0.0")
   --granularity <granularity>           Granularity (line, block, scope, func) (default: "block")
@@ -39,7 +39,7 @@ Options:
   --force                               Force overwrite existing goat.yaml file
 
 Examples:
-  goat init --stable master --publish "release-1.32"
+  goat init --old master --new "release-1.32"
   goat init --app-name "my-app" --app-version "2.0.0" --granularity func
   goat init --threads 4 --race
   goat init --ignores ".git,.idea,node_modules"
@@ -70,8 +70,8 @@ Examples:
 			}
 
 			// get all command line options
-			stableBranch, _ := cmd.Flags().GetString("stable")
-			publishBranch, _ := cmd.Flags().GetString("publish")
+			oldBranch, _ := cmd.Flags().GetString("old")
+			newBranch, _ := cmd.Flags().GetString("new")
 			appName, _ := cmd.Flags().GetString("app-name")
 			appVersion, _ := cmd.Flags().GetString("app-version")
 			granularity, _ := cmd.Flags().GetString("granularity")
@@ -116,8 +116,8 @@ Examples:
 			cfg := &config.Config{
 				AppName:               appName,
 				AppVersion:            appVersion,
-				StableBranch:          stableBranch,
-				PublishBranch:         publishBranch,
+				OldBranch:             oldBranch,
+				NewBranch:             newBranch,
 				GoatPackageName:       goatPackageName,
 				GoatPackageAlias:      goatPackageAlias,
 				GoatPackagePath:       goatPackagePath,
@@ -152,8 +152,8 @@ Examples:
 	}
 
 	// add command line options
-	cmd.Flags().String("stable", "main", "Stable branch")
-	cmd.Flags().String("publish", "HEAD", "Publish branch")
+	cmd.Flags().String("old", "main", "Old branch for comparison base")
+	cmd.Flags().String("new", "HEAD", "New branch for comparison target")
 	cmd.Flags().String("app-name", "example-app", "Application name")
 	cmd.Flags().String("app-version", "1.0.0", "Application version")
 	cmd.Flags().String("granularity", "block", "Granularity (line, block, scope, func)")

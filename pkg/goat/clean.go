@@ -260,6 +260,10 @@ func (e *CleanExecutor) clean() error {
 	log.Debugf("Checking if goat package is empty: %s", e.cfg.GoatPackagePath)
 	empty, err := utils.IsDirEmpty(e.cfg.GoatPackagePath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			log.Debugf("goat package does not exist: %s", e.cfg.GoatPackagePath)
+			return nil
+		}
 		log.Errorf("failed to check if goat package is empty: %v", err)
 		return err
 	}

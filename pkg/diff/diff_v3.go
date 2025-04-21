@@ -19,12 +19,12 @@ import (
 //
 // DifferV3 Code DifferV3ence Analyzer
 type DifferV3 struct {
-	cfg           *config.Config
-	repo          *git.Repository
-	stableHash    plumbing.Hash
-	publishHash   plumbing.Hash
-	publishCommit *object.Commit
-	stableCommit  *object.Commit
+	cfg       *config.Config
+	repo      *git.Repository
+	oldHash   plumbing.Hash
+	newHash   plumbing.Hash
+	newCommit *object.Commit
+	oldCommit *object.Commit
 }
 
 // NewDifferV3 creates a new code DifferV3
@@ -40,47 +40,47 @@ func NewDifferV3(cfg *config.Config) (*DifferV3, error) {
 		repo: repo,
 		cfg:  cfg,
 	}
-	stableHash, err := resolveRef(d.repo, cfg.StableBranch)
+	oldHash, err := resolveRef(d.repo, cfg.OldBranch)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve stable branch: %w", err)
+		return nil, fmt.Errorf("failed to resolve old branch: %w", err)
 	}
 
-	publishHash, err := resolveRef(d.repo, cfg.PublishBranch)
+	newHash, err := resolveRef(d.repo, cfg.NewBranch)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve publish branch: %w", err)
+		return nil, fmt.Errorf("failed to resolve new branch: %w", err)
 	}
 
-	stableCommit, err := d.repo.CommitObject(stableHash)
+	oldCommit, err := d.repo.CommitObject(oldHash)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get stable branch commit: %w", err)
+		return nil, fmt.Errorf("failed to get old branch commit: %w", err)
 	}
 
-	publishCommit, err := d.repo.CommitObject(publishHash)
+	newCommit, err := d.repo.CommitObject(newHash)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get publish branch commit: %w", err)
+		return nil, fmt.Errorf("failed to get new branch commit: %w", err)
 	}
-	d.stableHash = stableHash
-	d.publishHash = publishHash
-	d.stableCommit = stableCommit
-	d.publishCommit = publishCommit
+	d.oldHash = oldHash
+	d.newHash = newHash
+	d.oldCommit = oldCommit
+	d.newCommit = newCommit
 	return d, nil
 }
 
 // AnalyzeChanges analyzes code changes between two branches
 func (d *DifferV3) AnalyzeChanges() ([]*FileChange, error) {
 	// Get trees for both commits
-	stableTree, err := d.stableCommit.Tree()
+	oldTree, err := d.oldCommit.Tree()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get stable branch tree: %w", err)
+		return nil, fmt.Errorf("failed to get old branch tree: %w", err)
 	}
 
-	publishTree, err := d.publishCommit.Tree()
+	newTree, err := d.newCommit.Tree()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get publish branch tree: %w", err)
+		return nil, fmt.Errorf("failed to get new branch tree: %w", err)
 	}
 
 	// Compare trees
-	changes, err := object.DiffTree(stableTree, publishTree)
+	changes, err := object.DiffTree(oldTree, newTree)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to compare branch DifferV3ences: %w", err)
