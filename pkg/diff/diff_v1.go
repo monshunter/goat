@@ -12,8 +12,8 @@ import (
 	"github.com/monshunter/goat/pkg/utils"
 )
 
-// Differ Code Difference Analyzer
-type Differ struct {
+// DifferV1 Code DifferV1ence Analyzer
+type DifferV1 struct {
 	cfg           *config.Config
 	repo          *git.Repository
 	stableHash    plumbing.Hash
@@ -23,8 +23,8 @@ type Differ struct {
 	commits       map[plumbing.Hash]*object.Commit
 }
 
-// NewDiffer creates a new code differ
-func NewDiffer(cfg *config.Config) (*Differ, error) {
+// NewDifferV1 creates a new code DifferV1
+func NewDifferV1(cfg *config.Config) (*DifferV1, error) {
 	repo, err := git.PlainOpen(".")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
@@ -35,7 +35,7 @@ func NewDiffer(cfg *config.Config) (*Differ, error) {
 		return nil, fmt.Errorf("failed to check uncommitted changes: %w", err)
 	}
 
-	d := &Differ{
+	d := &DifferV1{
 		repo:    repo,
 		cfg:     cfg,
 		commits: make(map[plumbing.Hash]*object.Commit),
@@ -67,7 +67,7 @@ func NewDiffer(cfg *config.Config) (*Differ, error) {
 	return d, nil
 }
 
-func (d *Differ) loadCommits() error {
+func (d *DifferV1) loadCommits() error {
 	commits, err := d.repo.CommitObjects()
 	if err != nil {
 		return fmt.Errorf("failed to get commits: %w", err)
@@ -80,7 +80,7 @@ func (d *Differ) loadCommits() error {
 }
 
 // AnalyzeChanges analyzes code changes between two branches
-func (d *Differ) AnalyzeChanges() ([]*FileChange, error) {
+func (d *DifferV1) AnalyzeChanges() ([]*FileChange, error) {
 	// Get trees for both commits
 	stableTree, err := d.stableCommit.Tree()
 	if err != nil {
@@ -95,7 +95,7 @@ func (d *Differ) AnalyzeChanges() ([]*FileChange, error) {
 	// Compare trees
 	changes, err := object.DiffTree(stableTree, publishTree)
 	if err != nil {
-		return nil, fmt.Errorf("failed to compare branch differences: %w", err)
+		return nil, fmt.Errorf("failed to compare branch DifferV1ences: %w", err)
 	}
 	// Analyze changes
 	// Process changes concurrently with worker pool
@@ -125,6 +125,7 @@ func (d *Differ) AnalyzeChanges() ([]*FileChange, error) {
 
 	wg.Wait()
 	close(errChan)
+	close(sem)
 	for err := range errChan {
 		if err != nil {
 			return nil, err
@@ -134,7 +135,7 @@ func (d *Differ) AnalyzeChanges() ([]*FileChange, error) {
 }
 
 // analyzeChange analyzes a single file change
-func (d *Differ) analyzeChange(change *object.Change) (*FileChange, error) {
+func (d *DifferV1) analyzeChange(change *object.Change) (*FileChange, error) {
 	action, err := change.Action()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get change action: %w", err)
@@ -154,7 +155,7 @@ func (d *Differ) analyzeChange(change *object.Change) (*FileChange, error) {
 }
 
 // handleInsert handles insert or modify operations
-func (d *Differ) handleInsert(change *object.Change) (*FileChange, error) {
+func (d *DifferV1) handleInsert(change *object.Change) (*FileChange, error) {
 	fileName := change.To.Name
 	if !utils.IsTargetFile(fileName, d.cfg.Ignores) {
 		return nil, nil
@@ -171,7 +172,7 @@ func (d *Differ) handleInsert(change *object.Change) (*FileChange, error) {
 }
 
 // GetLineChanges gets line-level change information for a file, focusing only on incremental code
-func (d *Differ) getLineChanges(filepath string) ([]LineChange, error) {
+func (d *DifferV1) getLineChanges(filepath string) ([]LineChange, error) {
 	// Get file content
 	file, err := d.publishCommit.File(filepath)
 	if err != nil {
@@ -225,7 +226,7 @@ func (d *Differ) getLineChanges(filepath string) ([]LineChange, error) {
 }
 
 // isCommitAfterStable checks if the given commit is after the stable branch commit
-func (d *Differ) isCommitAfterStable(commitHash plumbing.Hash, stableHash plumbing.Hash) bool {
+func (d *DifferV1) isCommitAfterStable(commitHash plumbing.Hash, stableHash plumbing.Hash) bool {
 	// Return false if the commit is the same as stable branch commit
 	if commitHash == stableHash {
 		return false

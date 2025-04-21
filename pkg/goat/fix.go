@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"sync"
 
 	"github.com/monshunter/goat/pkg/log"
 
@@ -78,61 +79,131 @@ func (f *FixExecutor) prepare() error {
 		log.Errorf("failed to prepare files: %v", err)
 		return err
 	}
-
-	for _, file := range files {
-		var content string
-		contentBytes, err := os.ReadFile(file)
-		if err != nil {
-			log.Errorf("failed to read file: %v", err)
-			return err
-		}
-		updated := false
-		count := 0
-		// handle // + goat:delete
-		count, content, err = handleGoatDelete(f.cfg.PrinterConfig(), string(contentBytes), f.goatImportPath, f.goatPackageAlias)
-		if err != nil {
-			log.Errorf("failed to handle goat delete: %v", err)
-			return err
-		}
-		updated = updated || count > 0
-		f.changed = f.changed || updated
-		// handle // + goat:insert
-		count, content, err = handleGoatInsert(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
-		if err != nil {
-			log.Errorf("failed to handle goat insert: %v", err)
-			return err
-		}
-		updated = updated || count > 0
-		f.changed = f.changed || updated
-		// handle // + goat:generate
-		count, content, err = resetGoatGenerate(content)
-		if err != nil {
-			log.Errorf("failed to reset goat generate: %v", err)
-			return err
-		}
-		updated = updated || count > 0
-		// handle // + goat:main
-		isMainEntry := false
-		for _, mainPkgInfo := range f.mainPackageInfos {
-			if mainPkgInfo.MainFile == file {
-				isMainEntry = true
-				break
-			}
-		}
-		if isMainEntry {
-			count, content, err = resetGoatMain(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
-			if err != nil {
-				log.Errorf("failed to reset goat main entry: %v", err)
-				return err
-			}
-			updated = updated || count > 0
-		}
-
-		if updated {
-			f.filesContents[file] = content
-		}
+	goatFiles, err := f.prepareContents(files)
+	if err != nil {
+		log.Errorf("failed to prepare contents: %v", err)
+		return err
+	}
+	f.filesContents = make(map[string]string, len(goatFiles))
+	for _, goatFile := range goatFiles {
+		f.filesContents[goatFile.filename] = goatFile.content
 	}
 	return nil
+}
+
+func (f *FixExecutor) prepareContents(files []string) ([]goatFile, error) {
+	if f.cfg.Threads == 1 {
+		return f.prepareContentsSequential(files)
+	}
+	return f.prepareContentsParallel(files)
+}
+
+func (f *FixExecutor) prepareContentsSequential(files []string) ([]goatFile, error) {
+	goatFiles := make([]goatFile, 0, len(files))
+	for _, file := range files {
+		goatFile, err := f.prepareContent(file)
+		if err != nil {
+			log.Errorf("failed to prepare content: %v", err)
+			return nil, err
+		}
+		goatFiles = append(goatFiles, goatFile)
+	}
+	return goatFiles, nil
+}
+
+func (f *FixExecutor) prepareContentsParallel(files []string) ([]goatFile, error) {
+	goatFiles := make([]goatFile, 0, len(files))
+	wg := sync.WaitGroup{}
+	sem := make(chan struct{}, f.cfg.Threads)
+	errChan := make(chan error, len(files))
+	fileChan := make(chan goatFile, len(files))
+	wg.Add(len(files))
+	for _, file := range files {
+		sem <- struct{}{}
+		go func(file string) {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
+			goatFile, err := f.prepareContent(file)
+			if err != nil {
+				log.Errorf("failed to prepare content: %v", err)
+				errChan <- err
+				return
+			}
+			fileChan <- goatFile
+		}(file)
+	}
+	wg.Wait()
+	close(errChan)
+	for err := range errChan {
+		if err != nil {
+			return nil, err
+		}
+	}
+	close(fileChan)
+	for goatFile := range fileChan {
+		goatFiles = append(goatFiles, goatFile)
+	}
+	return goatFiles, nil
+}
+
+func (f *FixExecutor) prepareContent(file string) (goatFile, error) {
+	var content string
+	contentBytes, err := os.ReadFile(file)
+	if err != nil {
+		log.Errorf("failed to read file: %v", err)
+		return goatFile{}, err
+	}
+	updated := false
+	count := 0
+	// handle // + goat:delete
+	count, content, err = handleGoatDelete(f.cfg.PrinterConfig(), string(contentBytes), f.goatImportPath, f.goatPackageAlias)
+	if err != nil {
+		log.Errorf("failed to handle goat delete: %v", err)
+		return goatFile{}, err
+	}
+	updated = updated || count > 0
+	f.changed = f.changed || updated
+	// handle // + goat:insert
+	count, content, err = handleGoatInsert(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
+	if err != nil {
+		log.Errorf("failed to handle goat insert: %v", err)
+		return goatFile{}, err
+	}
+	updated = updated || count > 0
+	f.changed = f.changed || updated
+	// handle // + goat:generate
+	count, content, err = resetGoatGenerate(content)
+	if err != nil {
+		log.Errorf("failed to reset goat generate: %v", err)
+		return goatFile{}, err
+	}
+	updated = updated || count > 0
+	// handle // + goat:main
+	isMainEntry := false
+	for _, mainPkgInfo := range f.mainPackageInfos {
+		if mainPkgInfo.MainFile == file {
+			isMainEntry = true
+			break
+		}
+	}
+	if isMainEntry {
+		count, content, err = resetGoatMain(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
+		if err != nil {
+			log.Errorf("failed to reset goat main entry: %v", err)
+			return goatFile{}, err
+		}
+		updated = updated || count > 0
+	}
+
+	if !updated {
+		return goatFile{}, nil
+	}
+	return goatFile{
+		filename: file,
+		content:  content,
+	}, nil
 }
 
 func (f *FixExecutor) replaceTracks() (int, error) {
@@ -211,25 +282,47 @@ func (f *FixExecutor) apply() error {
 }
 
 func (f *FixExecutor) applyTracks() error {
+	if f.cfg.Threads == 1 {
+		return f.applyTracksSequential()
+	}
+	return f.applyTracksParallel()
+}
+
+func (f *FixExecutor) applyTracksSequential() error {
 	for file, content := range f.filesContents {
-		fset, fileAst, err := utils.GetAstTree("", []byte(content))
+		err := utils.FormatAndWrite(file, []byte(content), f.cfg.PrinterConfig())
 		if err != nil {
-			log.Errorf("failed to get ast tree: %v, file: %s\n", err, file)
+			log.Errorf("failed to format and write file: %v", err)
 			return err
 		}
-		contentBytes, err := utils.FormatAst(f.cfg.PrinterConfig(), fset, fileAst)
+	}
+	return nil
+}
+
+func (f *FixExecutor) applyTracksParallel() error {
+	wg := sync.WaitGroup{}
+	sem := make(chan struct{}, f.cfg.Threads)
+	errChan := make(chan error, len(f.filesContents))
+	wg.Add(len(f.filesContents))
+	for file, content := range f.filesContents {
+		sem <- struct{}{}
+		go func(file string, content string) {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
+			err := utils.FormatAndWrite(file, []byte(content), f.cfg.PrinterConfig())
+			if err != nil {
+				log.Errorf("failed to format and write file: %v", err)
+				errChan <- err
+				return
+			}
+		}(file, content)
+	}
+	wg.Wait()
+	close(errChan)
+	for err := range errChan {
 		if err != nil {
-			log.Errorf("failed to format ast: %v, file: %s\n", err, file)
-			return err
-		}
-		info, err := os.Stat(file)
-		if err != nil {
-			log.Errorf("failed to get file info: %v, file: %s\n", err, file)
-			return err
-		}
-		err = os.WriteFile(file, contentBytes, info.Mode().Perm())
-		if err != nil {
-			log.Errorf("failed to write file: %v, file: %s\n", err, file)
 			return err
 		}
 	}

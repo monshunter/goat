@@ -43,7 +43,7 @@ func getDiff(cfg *config.Config) ([]*diff.FileChange, error) {
 	var err error
 	switch cfg.DiffPrecision {
 	case 1:
-		differ, err = diff.NewDiffer(cfg)
+		differ, err = diff.NewDifferV1(cfg)
 	case 2:
 		differ, err = diff.NewDifferV2(cfg)
 	case 3:

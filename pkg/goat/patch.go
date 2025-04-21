@@ -3,6 +3,7 @@ package goat
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/monshunter/goat/pkg/log"
 
@@ -107,6 +108,14 @@ func (p *PatchExecutor) initMainPackageInfos() error {
 
 // initTracks initializes the trackers
 func (p *PatchExecutor) initTracks() error {
+	if p.cfg.Threads == 1 {
+		return p.initTracksSequential()
+	}
+	return p.initTracksParallel()
+}
+
+// initTracksSequential initializes the trackers sequentially
+func (p *PatchExecutor) initTracksSequential() error {
 	trackers := make([]tracking.Tracker, len(p.changes))
 	for i, change := range p.changes {
 		tracker, err := p.handleDiffChange(change)
@@ -116,6 +125,40 @@ func (p *PatchExecutor) initTracks() error {
 		trackers[i] = tracker
 	}
 
+	p.trackers = trackers
+	log.Debugf("Initialized %d trackers", len(trackers))
+	return nil
+}
+
+// initTracksParallel initializes the trackers in parallel
+func (p *PatchExecutor) initTracksParallel() error {
+	trackers := make([]tracking.Tracker, len(p.changes))
+	sem := make(chan struct{}, p.cfg.Threads)
+	errChan := make(chan error, len(p.changes))
+	wg := sync.WaitGroup{}
+	wg.Add(len(p.changes))
+	for i, change := range p.changes {
+		sem <- struct{}{}
+		go func(i int, change *diff.FileChange) {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
+			tracker, err := p.handleDiffChange(change)
+			if err != nil {
+				errChan <- fmt.Errorf("failed to handle file change %s: %w", change.Path, err)
+				return
+			}
+			trackers[i] = tracker
+		}(i, change)
+	}
+	wg.Wait()
+	close(errChan)
+	for err := range errChan {
+		if err != nil {
+			return err
+		}
+	}
 	p.trackers = trackers
 	log.Debugf("Initialized %d trackers", len(trackers))
 	return nil
@@ -161,13 +204,49 @@ func (p *PatchExecutor) replaceTracks() (int, error) {
 
 // saveTracks saves the trackers
 func (p *PatchExecutor) saveTracks() error {
-	totalSaved := 0
+	if p.cfg.Threads == 1 {
+		return p.saveTracksSequential()
+	}
+	return p.saveTracksParallel()
+}
+
+// saveTracksSequential saves the trackers sequentially
+func (p *PatchExecutor) saveTracksSequential() error {
 	for _, tracker := range p.trackers {
 		if err := tracker.Save(""); err != nil {
 			return fmt.Errorf("failed to save tracker for %s: %w", tracker.TargetFile(), err)
 		}
-		totalSaved++
 	}
-	log.Debugf("Saved %d tracker files", totalSaved)
+	log.Debugf("Saved %d tracker files", len(p.trackers))
+	return nil
+}
+
+// saveTracksParallel saves the trackers in parallel
+func (p *PatchExecutor) saveTracksParallel() error {
+	wg := sync.WaitGroup{}
+	wg.Add(len(p.trackers))
+	sem := make(chan struct{}, p.cfg.Threads)
+	errChan := make(chan error, len(p.trackers))
+	for _, tracker := range p.trackers {
+		sem <- struct{}{}
+		go func(tracker tracking.Tracker) {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
+			if err := tracker.Save(""); err != nil {
+				errChan <- fmt.Errorf("failed to save tracker for %s: %w", tracker.TargetFile(), err)
+				return
+			}
+		}(tracker)
+	}
+	wg.Wait()
+	close(errChan)
+	for err := range errChan {
+		if err != nil {
+			return err
+		}
+	}
+	log.Debugf("Saved %d tracker files", len(p.trackers))
 	return nil
 }

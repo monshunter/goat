@@ -2,6 +2,7 @@ package goat
 
 import (
 	"os"
+	"sync"
 
 	"github.com/monshunter/goat/pkg/log"
 
@@ -61,6 +62,13 @@ func (e *CleanExecutor) prepare() error {
 }
 
 func (e *CleanExecutor) prepareContents(files []string) error {
+	if e.cfg.Threads == 1 {
+		return e.prepareContentsSequential(files)
+	}
+	return e.prepareContentsParallel(files)
+}
+
+func (e *CleanExecutor) prepareContentsSequential(files []string) error {
 	for _, file := range files {
 		content, changed, err := e.prepareContent(file)
 		if err != nil {
@@ -76,6 +84,89 @@ func (e *CleanExecutor) prepareContents(files []string) error {
 	}
 	return nil
 }
+
+// prepareContentsParallel
+// prepareContentsParallel is the parallel version of prepareContents
+// It processes files concurrently using a worker pool pattern to limit goroutine count
+// Algorithm:
+// 1. Uses a semaphore channel to limit concurrent goroutines (e.g. e.cfg.Threads)
+// 2. Each worker processes a file and:
+//   - Reads and processes file content (prepareContent)
+//   - Stores result in thread-safe slice (goatFiles)
+//   - Reports errors via channel
+//
+// Complexity:
+// - Time: O(n) where n is number of files (parallelism reduces constant factor)
+// - Space: O(n) for storing results
+// Correctness:
+// - WaitGroup ensures all workers complete
+// - Error channel provides immediate error propagation
+// - Slice indexing prevents race conditions on results
+// Optimizations:
+// 1. Could batch files to reduce goroutine overhead
+// 2. Could use sync.Pool for temporary buffers
+// 3. Could implement work stealing for better load balancing
+// 4. Could add context cancellation support
+func (e *CleanExecutor) prepareContentsParallel(files []string) error {
+	var wg sync.WaitGroup
+	count := len(files)
+	wg.Add(count)
+
+	sem := make(chan struct{}, e.cfg.Threads)
+	errChan := make(chan error, count)
+
+	// We'll collect potential files here first
+	goatFilesChan := make(chan goatFile, count)
+
+	// Launch all goroutines first
+	for i, file := range files {
+		sem <- struct{}{}
+		go func(i int, file string) {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
+
+			content, changed, err := e.prepareContent(file)
+			if err != nil {
+				log.Errorf("failed to prepare content: %v", err)
+				errChan <- err
+				return
+			}
+
+			if changed {
+				goatFilesChan <- goatFile{
+					filename: file,
+					content:  content,
+				}
+			}
+
+			errChan <- nil
+		}(i, file)
+	}
+
+	// Wait for all goroutines to complete
+	go func() {
+		wg.Wait()
+		close(goatFilesChan)
+		close(errChan)
+	}()
+
+	// Check for errors
+	for err := range errChan {
+		if err != nil {
+			return err
+		}
+	}
+
+	// Collect results (only changed files)
+	for file := range goatFilesChan {
+		e.files = append(e.files, file)
+	}
+
+	return nil
+}
+
 func (e *CleanExecutor) prepareContent(filename string) (string, bool, error) {
 	log.Debugf("preparing content for file: %s", filename)
 	contentBytes, err := os.ReadFile(filename)
@@ -154,13 +245,17 @@ func (e *CleanExecutor) prepareContent(filename string) (string, bool, error) {
 }
 
 func (e *CleanExecutor) clean() error {
-	for _, file := range e.files {
-		log.Debugf("cleaning file: %s", file.filename)
-		if err := os.WriteFile(file.filename, []byte(file.content), 0644); err != nil {
-			log.Errorf("failed to write file: %v", err)
-			return err
-		}
+	var err error
+	if e.cfg.Threads == 1 {
+		err = e.cleanContentsSequential()
+	} else {
+		err = e.cleanContentsParallel()
 	}
+	if err != nil {
+		log.Errorf("failed to clean contents: %v", err)
+		return err
+	}
+
 	log.Infof("total cleaned files: %d", len(e.files))
 	log.Debugf("removing goat generated file: %s", e.cfg.GoatGeneratedFile())
 	os.Remove(e.cfg.GoatGeneratedFile())
@@ -174,6 +269,73 @@ func (e *CleanExecutor) clean() error {
 	if empty {
 		log.Debugf("removing goat package: %s", e.cfg.GoatPackagePath)
 		os.RemoveAll(e.cfg.GoatPackagePath)
+	}
+	return nil
+}
+
+func (e *CleanExecutor) cleanContentsSequential() error {
+	for _, file := range e.files {
+		log.Debugf("cleaning file: %s", file.filename)
+		err := utils.FormatAndWrite(file.filename, []byte(file.content), e.cfg.PrinterConfig())
+		if err != nil {
+			log.Errorf("failed to format and write file: %v", err)
+			return err
+		}
+	}
+	return nil
+}
+
+// cleanContentsParallel
+// cleanContentsParallel is the parallel version of cleanContentsSequential
+// It processes files concurrently using a worker pool pattern to limit goroutine count
+// Algorithm:
+// 1. Uses a semaphore channel to limit concurrent goroutines (e.g. e.cfg.Threads)
+// 2. Each worker:
+//   - Reads file stats (permissions)
+//   - Writes cleaned content with original permissions
+//   - Reports errors via channel
+//
+// Complexity:
+// - Time: O(n) where n is number of files (parallelism reduces constant factor)
+// - Space: O(n) for error channel and semaphore
+// Correctness:
+// - WaitGroup ensures all workers complete
+// - Error channel provides immediate error propagation
+// - Original permissions preserved
+// Optimizations:
+// 1. Could batch files to reduce goroutine overhead
+// 2. Could use sync.Pool for temporary buffers
+// 3. Could implement work stealing for better load balancing
+// 4. Could add context cancellation support
+// 5. Could pre-allocate error channel capacity
+func (e *CleanExecutor) cleanContentsParallel() error {
+	var wg sync.WaitGroup
+	count := len(e.files)
+	wg.Add(count)
+	sem := make(chan struct{}, e.cfg.Threads)
+	errChan := make(chan error, count)
+	for _, file := range e.files {
+		sem <- struct{}{}
+		go func(file goatFile) {
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
+			log.Debugf("cleaning file: %s", file.filename)
+			err := utils.FormatAndWrite(file.filename, []byte(file.content), e.cfg.PrinterConfig())
+			if err != nil {
+				log.Errorf("failed to format and write file: %v", err)
+				errChan <- err
+				return
+			}
+		}(file)
+	}
+	wg.Wait()
+	close(errChan)
+	for err := range errChan {
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

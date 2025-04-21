@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/monshunter/goat/pkg/log"
 	"github.com/spf13/cobra"
@@ -16,10 +17,10 @@ func main() {
 		Short: "Goat is a tool for analyzing and instrumenting Go programs",
 		Long:  `Goat is a tool for analyzing and instrumenting Go programs`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// 设置日志的verbose模式
+			// Set the verbose mode for the log
 			log.SetVerbose(verbose)
 
-			// 如果是help命令或version命令，则跳过项目检查
+			// Skip project checks for help or version commands
 			if cmd.Name() == "help" || cmd.Name() == "version" {
 				return nil
 			}
@@ -38,7 +39,10 @@ func main() {
 		},
 	}
 
-	// 添加全局持久化标志
+	// Set the number of CPUs
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	// Add global persistent flags
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
 
 	rootCmd.AddCommand(initCmd())
