@@ -27,8 +27,10 @@ type LineChange struct {
 	Lines int `json:"lines"` // number of lines of new code
 }
 
+// LineChanges is a list of line changes
 type LineChanges []LineChange
 
+// Search searches for a line change
 func (l LineChanges) Search(line int) int {
 	for i, change := range l {
 		if line >= change.Start && line <= change.Start+change.Lines-1 {
@@ -38,6 +40,7 @@ func (l LineChanges) Search(line int) int {
 	return -1
 }
 
+// repoInfo is the repository information
 type repoInfo struct {
 	repo      *git.Repository
 	oldHash   plumbing.Hash
@@ -239,6 +242,7 @@ func filterValidFileChanges(fileChanges []*FileChange) []*FileChange {
 	return fileChanges[:i]
 }
 
+// getLinesFromChunks gets the lines from the chunks
 func getLinesFromChunks(chunks []diff.Chunk) int {
 	count := 0
 	for _, chunk := range chunks {
@@ -247,6 +251,7 @@ func getLinesFromChunks(chunks []diff.Chunk) int {
 	return count
 }
 
+// getLineChange gets the line changes from the file patch
 func getLineChange(filePatch diff.FilePatch) []LineChange {
 	from, to := filePatch.Files()
 	if (from == nil && to == nil) || (from != nil && to == nil) {

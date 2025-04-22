@@ -8,76 +8,45 @@ import (
 	"slices"
 )
 
-// Tracker
+// Tracker is the interface for the tracker
 type Tracker interface {
+	// Track tracks the code and returns the number of tracking points
 	Track() (int, error)
-	Replace(target string, replace func(older string) (newer string)) (int, error)
-	Bytes() []byte
+	// Content returns the content of the tracker
+	Content() []byte
+	// Count returns the number of tracking points
 	Count() int
-	Save(path string) error
-	TargetFile() string
+	// Target returns the target file name
+	Target() string
+	// SetContent sets the content of the tracker
+	SetContent([]byte)
 }
 
-type CodeInsertPosition int
-
-const (
-	CodeInsertPositionFront CodeInsertPosition = 1
-	CodeInsertPositionBack  CodeInsertPosition = 2
-)
-
-const (
-	CodeInsertPositionFrontStr = "front"
-	CodeInsertPositionBackStr  = "back"
-)
-
-func (c CodeInsertPosition) String() string {
-	return []string{CodeInsertPositionFrontStr, CodeInsertPositionBackStr}[c-1]
-}
-
-func (c CodeInsertPosition) Int() int {
-	return int(c)
-}
-
-func (c CodeInsertPosition) IsFront() bool {
-	return c == CodeInsertPositionFront
-}
-
-func (c CodeInsertPosition) IsBack() bool {
-	return c == CodeInsertPositionBack
-}
-
-type TrackCodeProvider interface {
-	Position() CodeInsertPosition
-	Stmts() []string
-}
-
-type TrackTemplateProvider interface {
-	ImportSpec() (pkgPath, alias string)
-	FrontTrackCodeProvider() TrackCodeProvider
-	BackTrackCodeProvider() TrackCodeProvider
-}
-
+// InsertPosition is the position of the tracking point
 type InsertPosition struct {
-	position CodeInsertPosition
-	line     int
-	column   int
+	line   int
+	column int
 }
 
+// InsertPositions is a list of insert positions
 type InsertPositions []InsertPosition
 
-func (p *InsertPositions) Insert(position CodeInsertPosition, line int, column int) {
-	*p = append(*p, InsertPosition{position: position, line: line, column: column})
+// Insert inserts an insert position
+func (p *InsertPositions) Insert(line int, column int) {
+	*p = append(*p, InsertPosition{line: line, column: column})
 }
 
+// Sort sorts the insert positions
 func (p *InsertPositions) Sort() {
 	slices.SortFunc(*p, func(a, b InsertPosition) int {
 		if a.line == b.line {
-			return a.position.Int() - b.position.Int()
+			return a.column - b.column
 		}
 		return a.line - b.line
 	})
 }
 
+// Unique removes duplicate insert positions
 func (p *InsertPositions) Unique() {
 	// return
 	unique := make(map[InsertPosition]struct{})
@@ -91,10 +60,12 @@ func (p *InsertPositions) Unique() {
 	*p = tmp
 }
 
+// Reset resets the insert positions
 func (p *InsertPositions) Reset() {
 	*p = InsertPositions{}
 }
 
+// BlockScope is a scope of a block
 type BlockScope struct {
 	StartLine int
 	EndLine   int
@@ -104,24 +75,30 @@ func (b *BlockScope) String() string {
 	return fmt.Sprintf("BlockScope{StartLine: %d, EndLine: %d}", b.StartLine, b.EndLine)
 }
 
+// IsEmpty checks if the block scope is empty
 func (b *BlockScope) IsEmpty() bool {
 	return b.StartLine == 0 && b.EndLine == 0
 }
 
+// IsValid checks if the block scope is valid
 func (b *BlockScope) IsValid() bool {
 	return b.StartLine < b.EndLine
 }
 
+// Contains checks if the block scope contains the line
 func (b *BlockScope) Contains(line int) bool {
 	return line > b.StartLine && line < b.EndLine
 }
 
+// ContainsRange checks if the block scope contains the range
 func (b *BlockScope) ContainsRange(start, end int) bool {
 	return start > b.StartLine && end < b.EndLine
 }
 
+// BlockScopes is a list of block scopes
 type BlockScopes []BlockScope
 
+// Sort sorts the block scopes
 func (b BlockScopes) Sort() {
 	slices.SortFunc(b, func(a, b BlockScope) int {
 		if a.StartLine == b.StartLine {
@@ -270,6 +247,7 @@ func NewTrackScope(startLine int, endLine int, node *ast.BlockStmt) *TrackScope 
 	}
 }
 
+// AddChild adds a child to the track scope
 func (f *TrackScope) AddChild(child TrackScope) {
 	f.Children = append(f.Children, child)
 }
@@ -570,10 +548,12 @@ func blockNodesOfFunction(stmts []ast.Stmt) ([]ast.Stmt, error) {
 	return blockNodes, nil
 }
 
+// scopeKey is the key of the scope
 type scopeKey struct {
 	startLine, endLine int
 }
 
+// patchScope is the patch scope of the track scope
 type patchScope struct {
 	scopeKey
 	// indicesInfo[i]:
@@ -583,6 +563,7 @@ type patchScope struct {
 	marks []int // len(marks) == max(endLine - startLine - 1, 0)
 }
 
+// newTrackScopeIndex creates a new track scope index
 func newTrackScopeIndex(startLine, endLine int) *patchScope {
 	length := endLine - startLine - 1
 	var marks []int
@@ -605,14 +586,17 @@ func (t *patchScope) initMarks(marks []bool) {
 	}
 }
 
+// isInserted checks if the line has been marked inserted
 func (t *patchScope) isInserted(line int) bool {
 	return t.marks[line-t.startLine-1] == 2
 }
 
+// isNewLine checks if the line is a new line
 func (t *patchScope) isNewLine(line int) bool {
 	return t.marks[line-t.startLine-1] == 1
 }
 
+// canInsert checks if the line can be inserted
 func (t *patchScope) canInsert(line int) bool {
 	if t.isInserted(line) {
 		return false

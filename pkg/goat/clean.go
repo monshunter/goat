@@ -10,6 +10,7 @@ import (
 	"github.com/monshunter/goat/pkg/utils"
 )
 
+// CleanExecutor is the executor for the clean
 type CleanExecutor struct {
 	cfg              *config.Config
 	goatImportPath   string
@@ -17,6 +18,7 @@ type CleanExecutor struct {
 	files            []goatFile
 }
 
+// NewCleanExecutor creates a new clean executor
 func NewCleanExecutor(cfg *config.Config) *CleanExecutor {
 	executor := &CleanExecutor{
 		cfg:   cfg,
@@ -27,6 +29,7 @@ func NewCleanExecutor(cfg *config.Config) *CleanExecutor {
 	return executor
 }
 
+// Run runs the clean executor
 func (e *CleanExecutor) Run() error {
 	log.Infof("Cleaning project")
 	if err := e.prepare(); err != nil {
@@ -41,6 +44,7 @@ func (e *CleanExecutor) Run() error {
 	return nil
 }
 
+// prepare prepares the files
 func (e *CleanExecutor) prepare() error {
 	log.Infof("Preparing files")
 	var err error
@@ -57,6 +61,7 @@ func (e *CleanExecutor) prepare() error {
 	return nil
 }
 
+// prepareContents prepares the contents of the files
 func (e *CleanExecutor) prepareContents(files []string) error {
 	if e.cfg.Threads == 1 {
 		return e.prepareContentsSequential(files)
@@ -64,6 +69,7 @@ func (e *CleanExecutor) prepareContents(files []string) error {
 	return e.prepareContentsParallel(files)
 }
 
+// prepareContentsSequential prepares the contents of the files sequentially
 func (e *CleanExecutor) prepareContentsSequential(files []string) error {
 	for _, file := range files {
 		content, changed, err := e.prepareContent(file)
@@ -240,6 +246,7 @@ func (e *CleanExecutor) prepareContent(filename string) (string, bool, error) {
 	return newContent, changed, nil
 }
 
+// clean cleans the contents of the files
 func (e *CleanExecutor) clean() error {
 	log.Infof("Cleaning contents")
 	var err error
@@ -274,6 +281,7 @@ func (e *CleanExecutor) clean() error {
 	return nil
 }
 
+// cleanContentsSequential cleans the contents of the files sequentially
 func (e *CleanExecutor) cleanContentsSequential() error {
 	for _, file := range e.files {
 		log.Debugf("Cleaning file: %s", file.filename)

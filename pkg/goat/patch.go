@@ -14,6 +14,7 @@ import (
 	"github.com/monshunter/goat/pkg/utils"
 )
 
+// PatchExecutor is the executor for the patch
 type PatchExecutor struct {
 	cfg                 *config.Config
 	mainPackageInfos    []maininfo.MainPackageInfo
@@ -27,6 +28,7 @@ type PatchExecutor struct {
 	changed bool
 }
 
+// NewPatchExecutor creates a new patch executor
 func NewPatchExecutor(cfg *config.Config) *PatchExecutor {
 	PatchExecutor := &PatchExecutor{
 		cfg:                 cfg,
@@ -62,6 +64,7 @@ func (f *PatchExecutor) Run() error {
 	return nil
 }
 
+// initMainPackageInfos initializes the main package infos
 func (f *PatchExecutor) initMainPackageInfos() error {
 	log.Infof("Getting main package infos")
 	mainPkgInfos, err := getMainPackageInfos(".", f.goModule, f.cfg.Ignores)
@@ -91,6 +94,7 @@ func (f *PatchExecutor) prepare() error {
 	return nil
 }
 
+// prepareContents prepares the contents of the files
 func (f *PatchExecutor) prepareContents(files []string) ([]goatFile, error) {
 	if f.cfg.Threads == 1 {
 		return f.prepareContentsSequential(files)
@@ -98,6 +102,7 @@ func (f *PatchExecutor) prepareContents(files []string) ([]goatFile, error) {
 	return f.prepareContentsParallel(files)
 }
 
+// prepareContentsSequential prepares the contents of the files sequentially
 func (f *PatchExecutor) prepareContentsSequential(files []string) ([]goatFile, error) {
 	goatFiles := make([]goatFile, 0, len(files))
 	for _, file := range files {
@@ -111,6 +116,7 @@ func (f *PatchExecutor) prepareContentsSequential(files []string) ([]goatFile, e
 	return goatFiles, nil
 }
 
+// prepareContentsParallel prepares the contents of the files in parallel
 func (f *PatchExecutor) prepareContentsParallel(files []string) ([]goatFile, error) {
 	goatFiles := make([]goatFile, 0, len(files))
 	wg := sync.WaitGroup{}
@@ -148,6 +154,7 @@ func (f *PatchExecutor) prepareContentsParallel(files []string) ([]goatFile, err
 	return goatFiles, nil
 }
 
+// prepareContent prepares the content of the file
 func (f *PatchExecutor) prepareContent(file string) (goatFile, error) {
 	var content string
 	contentBytes, err := os.ReadFile(file)
@@ -206,6 +213,7 @@ func (f *PatchExecutor) prepareContent(file string) (goatFile, error) {
 	}, nil
 }
 
+// replaceTracks replaces the tracks in the files
 func (f *PatchExecutor) replaceTracks() (int, error) {
 	start := 1
 	importPath := utils.GoatPackageImportPath(f.goModule, f.cfg.GoatPackagePath)
@@ -235,6 +243,7 @@ func (f *PatchExecutor) replaceTracks() (int, error) {
 	return start - 1, nil
 }
 
+// apply applies the patch
 func (f *PatchExecutor) apply() error {
 	log.Infof("Applying patch")
 	count, err := f.replaceTracks()
@@ -282,6 +291,7 @@ func (f *PatchExecutor) apply() error {
 	return nil
 }
 
+// applyTracks applies the tracks
 func (f *PatchExecutor) applyTracks() error {
 	if f.cfg.Threads == 1 {
 		return f.applyTracksSequential()
@@ -289,6 +299,7 @@ func (f *PatchExecutor) applyTracks() error {
 	return f.applyTracksParallel()
 }
 
+// applyTracksSequential applies the tracks sequentially
 func (f *PatchExecutor) applyTracksSequential() error {
 	for file, content := range f.filesContents {
 		err := utils.FormatAndSave(file, []byte(content), f.cfg.PrinterConfig())
@@ -300,6 +311,7 @@ func (f *PatchExecutor) applyTracksSequential() error {
 	return nil
 }
 
+// applyTracksParallel applies the tracks in parallel
 func (f *PatchExecutor) applyTracksParallel() error {
 	wg := sync.WaitGroup{}
 	sem := make(chan struct{}, f.cfg.Threads)

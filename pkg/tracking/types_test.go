@@ -194,9 +194,9 @@ func TestBlockScopesSearch2(t *testing.T) {
 func TestBlockScopesUnique(t *testing.T) {
 	// InsertPosition is private, we need to test it through the methods of InsertPositions
 	var positions InsertPositions
-	positions.Insert(CodeInsertPositionFront, 10, 5)
-	positions.Insert(CodeInsertPositionBack, 20, 10)
-	positions.Insert(CodeInsertPositionFront, 10, 5) // Duplicate item
+	positions.Insert(10, 5)
+	positions.Insert(20, 10)
+	positions.Insert(10, 5) // Duplicate item
 
 	// Test the length before unique
 	if len(positions) != 3 {
@@ -213,9 +213,10 @@ func TestBlockScopesUnique(t *testing.T) {
 
 func TestBlockScopesReset(t *testing.T) {
 	var positions InsertPositions
-	positions.Insert(CodeInsertPositionFront, 10, 5)
-	positions.Insert(CodeInsertPositionBack, 20, 10)
-
+	positions.Insert(10, 5)
+	positions.Insert(20, 10)
+	positions.Insert(10, 5) // Duplicate item
+	positions.Unique()
 	// Test the length before reset
 	if len(positions) != 2 {
 		t.Errorf("Expected positions length to be 2, got %d", len(positions))

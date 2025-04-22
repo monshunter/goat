@@ -15,7 +15,7 @@ import (
 //
 //	Blame the limited capabilities of go-git. I have tried various methods but still got no result.
 //
-// DifferV3 Code DifferV3ence Analyzer
+// DifferV3 is the third version of the code difference analyzer
 type DifferV3 struct {
 	cfg      *config.Config
 	repoInfo *repoInfo

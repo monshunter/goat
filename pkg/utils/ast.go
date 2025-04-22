@@ -15,8 +15,10 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
+// defaultPrinterConfig is the default printer config
 var defaultPrinterConfig = &printer.Config{Mode: printer.UseSpaces | printer.TabIndent, Tabwidth: 8, Indent: 0}
 
+// GetAstTree parses the source code and returns the ast tree
 func GetAstTree(fileName string, content []byte) (*token.FileSet, *ast.File, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, fileName, content, parser.ParseComments)
@@ -26,6 +28,7 @@ func GetAstTree(fileName string, content []byte) (*token.FileSet, *ast.File, err
 	return fset, f, nil
 }
 
+// FormatAst formats the ast tree and returns the formatted code
 func FormatAst(cfg *printer.Config, fset *token.FileSet, f *ast.File) ([]byte, error) {
 	var buf bytes.Buffer
 	if cfg == nil {
@@ -38,6 +41,7 @@ func FormatAst(cfg *printer.Config, fset *token.FileSet, f *ast.File) ([]byte, e
 	return buf.Bytes(), nil
 }
 
+// AddCodes adds the codes to the ast tree and returns the formatted code
 func AddCodes(cfg *printer.Config, fset *token.FileSet, f *ast.File, position int, codes []string) ([]byte, error) {
 	var src bytes.Buffer
 	if cfg == nil {
@@ -51,7 +55,7 @@ func AddCodes(cfg *printer.Config, fset *token.FileSet, f *ast.File, position in
 	for _, code := range codes {
 		addLen += len(code) + 1
 	}
-	// 对于每个插入位置，将打印语句插入到源代码字符串中
+	// For each insertion position, insert the print statement into the source code string
 	var buf bytes.Buffer
 	buf.Grow(len(srcStr) + addLen)
 	lines := 0
@@ -82,6 +86,7 @@ func AddCodes(cfg *printer.Config, fset *token.FileSet, f *ast.File, position in
 	return content, nil
 }
 
+// AddImport adds the import to the ast tree and returns the formatted code
 func AddImport(cfg *printer.Config, pkgPath, alias string, filename string, content []byte) ([]byte, error) {
 	if pkgPath == "" {
 		return content, nil
@@ -110,6 +115,7 @@ func AddImport(cfg *printer.Config, pkgPath, alias string, filename string, cont
 	return content, nil
 }
 
+// DeleteImport deletes the import from the ast tree and returns the formatted code
 func DeleteImport(cfg *printer.Config, pkgPath, alias string, filename string, content []byte) ([]byte, error) {
 	if pkgPath == "" {
 		return content, nil
@@ -138,6 +144,7 @@ func DeleteImport(cfg *printer.Config, pkgPath, alias string, filename string, c
 	return content, nil
 }
 
+// Replace replaces the target string with the new string and returns the number of replacements and the new content
 func Replace(content string, target string, replace func(older string) (newer string)) (int, string, error) {
 	// Use regexp to replace the target string
 	re := regexp.MustCompile(regexp.QuoteMeta(target))
@@ -151,6 +158,7 @@ func Replace(content string, target string, replace func(older string) (newer st
 	return count, newContent, nil
 }
 
+// ReplaceWithRegexp replaces the target string with the new string and returns the number of replacements and the new content
 func ReplaceWithRegexp(re *regexp.Regexp, content string, replace func(older string) (newer string)) (int, string, error) {
 	// Use regexp to replace the target string
 	count := len(re.FindAllString(content, -1))
@@ -163,10 +171,12 @@ func ReplaceWithRegexp(re *regexp.Regexp, content string, replace func(older str
 	return count, newContent, nil
 }
 
+// IsTargetFile checks if the file is a target file
 func IsTargetFile(fileName string, excludes []string) bool {
 	return IsTargetDir(filepath.Dir(fileName), excludes) && IsGoFile(fileName)
 }
 
+// IsTargetDir checks if the directory is a target directory
 func IsTargetDir(dir string, excludes []string) bool {
 	// check if the dir is in the excludes
 	if dir == "vendor" || dir == "testdata" || dir == "node_modules" {
@@ -188,6 +198,7 @@ func IsTargetDir(dir string, excludes []string) bool {
 	return true
 }
 
+// IsGoFile checks if the file is a go file
 func IsGoFile(fileName string) bool {
 	if !strings.HasSuffix(fileName, ".go") || strings.HasSuffix(fileName, "_test.go") {
 		return false
@@ -244,6 +255,7 @@ func IsGoComment(code string) bool {
 	return false
 }
 
+// ParseComments parses the comments from the ast tree and returns the comments
 func ParseComments(content []byte) (map[int]string, error) {
 	fset, f, err := GetAstTree("", content)
 	if err != nil {
@@ -262,6 +274,7 @@ func ParseComments(content []byte) (map[int]string, error) {
 	return comments, nil
 }
 
+// FormatAndSave formats the ast tree and saves the formatted code to the file
 func FormatAndSave(filename string, content []byte, cfg *printer.Config) error {
 	fset, fileAst, err := GetAstTree("", content)
 	if err != nil {

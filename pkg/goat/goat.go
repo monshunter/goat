@@ -79,11 +79,13 @@ type componentTrackIdx struct {
 	trackIdx    []int
 }
 
+// goatFile is the goat file
 type goatFile struct {
 	filename string
 	content  string
 }
 
+// debugComponentTrackIdxs debugs the component track idxs
 func debugComponentTrackIdxs(componentTrackIdxs []componentTrackIdx) {
 	for _, component := range componentTrackIdxs {
 		log.Infof("component: %d, %s, %d, %v\n",
@@ -169,6 +171,7 @@ func getMainPackageInfos(projectRoot string, goModule string, ignores []string) 
 	return mainPkgInfo.MainPackageInfos, nil
 }
 
+// applyMainEntries applies the main entries
 func applyMainEntries(cfg *config.Config, goModule string,
 	mainPackageInfos []maininfo.MainPackageInfo,
 	componentTrackIdxs []componentTrackIdx) error {
@@ -216,6 +219,7 @@ func handleGoatDelete(cfg *printer.Config, fileContents string, goatImportPath s
 	return count, fileContents, nil
 }
 
+// handleGoatInsert handles the goat insert
 func handleGoatInsert(cfg *printer.Config, fileContents string, goatImportPath string, goatPackageAlias string) (int, string, error) {
 	count, content, err := utils.ReplaceWithRegexp(config.TrackInsertRegexp, fileContents,
 		func(older string) (newer string) {
@@ -237,6 +241,7 @@ func handleGoatInsert(cfg *printer.Config, fileContents string, goatImportPath s
 	return count, fileContents, nil
 }
 
+// resetGoatGenerate resets the goat generate
 func resetGoatGenerate(fileContents string) (int, string, error) {
 	return utils.ReplaceWithRegexp(config.TrackGenerateEndRegexp, fileContents,
 		func(older string) (newer string) {
@@ -244,6 +249,7 @@ func resetGoatGenerate(fileContents string) (int, string, error) {
 		})
 }
 
+// resetGoatMain resets the goat main
 func resetGoatMain(cfg *printer.Config, fileContents string, goatImportPath string, goatPackageAlias string) (int, string, error) {
 	count, content, err := utils.ReplaceWithRegexp(config.TrackMainEntryEndRegexp, fileContents,
 		func(older string) (newer string) {

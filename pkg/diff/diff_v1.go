@@ -12,13 +12,13 @@ import (
 	"github.com/monshunter/goat/pkg/utils"
 )
 
-// DifferV1 Code DifferV1ence Analyzer
+// DifferV1 is the first version of the code difference analyzer
 type DifferV1 struct {
 	cfg      *config.Config
 	repoInfo *repoInfo
 }
 
-// NewDifferV1 creates a new code DifferV1
+// NewDifferV1 creates a new code difference analyzer
 func NewDifferV1(cfg *config.Config) (*DifferV1, error) {
 	repoInfo, err := newRepoInfo(cfg.OldBranch, cfg.NewBranch)
 	if err != nil {

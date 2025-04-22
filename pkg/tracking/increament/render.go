@@ -146,6 +146,7 @@ func (v *Values) Clone() *Values {
 	return newValues
 }
 
+// Render renders the Values to a byte slice
 func (v *Values) Render() ([]byte, error) {
 	tmpl, err := template.New("").Parse(Template)
 	if err != nil {
@@ -191,6 +192,7 @@ func (v *Values) Save(outputPath string) error {
 	return os.WriteFile(outputPath, data, 0644)
 }
 
+// Remove removes the file
 func (v *Values) Remove(outputPath string) error {
 	return os.Remove(outputPath)
 }

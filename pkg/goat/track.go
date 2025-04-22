@@ -176,11 +176,12 @@ func (p *TrackExecutor) initTracksParallel() error {
 	return nil
 }
 
+// handleDiffChange handles the diff change
 func (p *TrackExecutor) handleDiffChange(change *diff.FileChange) (tracking.Tracker, error) {
 	granularity := p.cfg.GetGranularity()
-	tracker, err := tracking.NewIncreamentTrack(".", change,
-		increament.TrackImportPathPlaceHolder, increament.GetPackageInsertData(),
-		nil, granularity, p.cfg.PrinterConfig())
+	tracker, err := tracking.NewIncrementalTrack(".", change,
+		increament.TrackImportPathPlaceHolder, increament.GetPackageInsertStmts(),
+		granularity, p.cfg.PrinterConfig())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create incremental tracker: %w", err)
 	}
@@ -198,19 +199,21 @@ func (p *TrackExecutor) replaceTracks() (int, error) {
 	start := 1
 	importPath := utils.GoatPackageImportPath(p.goModule, p.cfg.GoatPackagePath)
 	for i, tracker := range p.trackers {
-		count, err := tracker.Replace(increament.TrackStmtPlaceHolder, increament.IncreamentReplaceStmt(p.cfg.GoatPackageAlias, start))
+		count, newContent, err := utils.Replace(string(tracker.Content()), increament.TrackStmtPlaceHolder,
+			increament.IncreamentReplaceStmt(p.cfg.GoatPackageAlias, start))
 		if err != nil || count != tracker.Count() {
 			return 0, fmt.Errorf("failed to replace statements in %s: expected=%d, actual=%d: %w",
-				tracker.TargetFile(), tracker.Count(), count, err)
+				tracker.Target(), tracker.Count(), count, err)
 		}
 		p.fileTrackIdStartMap[p.changes[i].Path] = trackIdxInterval{start: start, end: start + count - 1}
 		start += count
-		_, err = tracker.Replace(fmt.Sprintf("%q", increament.TrackImportPathPlaceHolder),
+		_, newContent, err = utils.Replace(newContent, fmt.Sprintf("%q", increament.TrackImportPathPlaceHolder),
 			increament.IncreamentReplaceImport(p.cfg.GoatPackageAlias, importPath))
 		if err != nil {
-			return 0, fmt.Errorf("failed to replace import in %s: %w", tracker.TargetFile(), err)
+			return 0, fmt.Errorf("failed to replace import in %s: %w", tracker.Target(), err)
 		}
-		log.Debugf("Replaced %d tracking points in %s", count, tracker.TargetFile())
+		tracker.SetContent([]byte(newContent))
+		log.Debugf("Replaced %d tracking points in %s", count, tracker.Target())
 	}
 	return start - 1, nil
 }
@@ -226,8 +229,8 @@ func (p *TrackExecutor) saveTracks() error {
 // saveTracksSequential saves the trackers sequentially
 func (p *TrackExecutor) saveTracksSequential() error {
 	for _, tracker := range p.trackers {
-		if err := tracker.Save(""); err != nil {
-			return fmt.Errorf("failed to save tracker for %s: %w", tracker.TargetFile(), err)
+		if err := utils.FormatAndSave(tracker.Target(), tracker.Content(), p.cfg.PrinterConfig()); err != nil {
+			return fmt.Errorf("failed to save tracker for %s: %w", tracker.Target(), err)
 		}
 	}
 	log.Debugf("Saved %d tracking files", len(p.trackers))
@@ -247,8 +250,8 @@ func (p *TrackExecutor) saveTracksParallel() error {
 				<-sem
 				wg.Done()
 			}()
-			if err := tracker.Save(""); err != nil {
-				errChan <- fmt.Errorf("failed to save tracker for %s: %w", tracker.TargetFile(), err)
+			if err := utils.FormatAndSave(tracker.Target(), tracker.Content(), p.cfg.PrinterConfig()); err != nil {
+				errChan <- fmt.Errorf("failed to save tracker for %s: %w", tracker.Target(), err)
 				return
 			}
 		}(tracker)

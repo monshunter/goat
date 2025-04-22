@@ -278,7 +278,7 @@ func GetMainEntryInsertData(ident string, componentID int) []string {
 	}
 }
 
-func GetPackageInsertData() []string {
+func GetPackageInsertStmts() []string {
 	return []string{
 		config.TrackGenerateComment,
 		config.TrackTipsComment,
@@ -289,7 +289,7 @@ func GetPackageInsertData() []string {
 
 func GetPackageInsertDataString() string {
 	buf := bytes.NewBuffer(nil)
-	for _, line := range GetPackageInsertData() {
+	for _, line := range GetPackageInsertStmts() {
 		buf.WriteString(line)
 		buf.WriteString("\n")
 	}
