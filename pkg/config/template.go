@@ -45,9 +45,9 @@ goatPackageAlias: {{.GoatPackageAlias}}
 ## Goat package path, where goat package is installed in your project
 goatPackagePath: {{.GoatPackagePath}}
 
-## Granularity ([line, block, scope, func], default: block)
+## Granularity ([line, patch, scope, func], default: patch)
 ## granularity = line: Track changes at the line level when the line is modified
-## granularity = block: Track changes at the block level when the block is modified
+## granularity = patch: Track changes at the patch(diff patch in the same scope) level when the patch is modified
 ## granularity = scope: Track changes at the scope level when the scope is modified
 ## granularity = func: Track changes at the function level when the function is modified
 granularity: {{.Granularity}}

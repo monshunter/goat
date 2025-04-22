@@ -74,9 +74,9 @@ func (p *TrackExecutor) Run() error {
 		return fmt.Errorf("failed to save tracking points: %w", err)
 	}
 
-	log.Infof("Applying main entry")
-	if err := applyMainEntry(p.cfg, p.goModule, p.mainPackageInfos, componentTrackIdxs); err != nil {
-		return fmt.Errorf("failed to apply main entry: %w", err)
+	log.Infof("Applying main entries")
+	if err := applyMainEntries(p.cfg, p.goModule, p.mainPackageInfos, componentTrackIdxs); err != nil {
+		return fmt.Errorf("failed to apply main entries: %w", err)
 	}
 
 	log.Infof("Track applied successfully with %d tracking points", count)

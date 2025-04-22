@@ -6,7 +6,6 @@ import (
 	"go/parser"
 	"go/token"
 	"slices"
-	"strings"
 )
 
 // Tracker
@@ -47,37 +46,8 @@ func (c CodeInsertPosition) IsBack() bool {
 	return c == CodeInsertPositionBack
 }
 
-type CodeInsertType int
-
-const (
-	CodeInsertTypeComment CodeInsertType = 1
-	CodeInsertTypeStmt    CodeInsertType = 2
-)
-
-const (
-	CodeInsertTypeCommentStr = "comment"
-	CodeInsertTypeStmtStr    = "stmt"
-)
-
-func (c CodeInsertType) String() string {
-	return []string{CodeInsertTypeCommentStr, CodeInsertTypeStmtStr}[c-1]
-}
-
-func (c CodeInsertType) Int() int {
-	return int(c)
-}
-
-func (c CodeInsertType) IsComment() bool {
-	return c == CodeInsertTypeComment
-}
-
-func (c CodeInsertType) IsStmt() bool {
-	return c == CodeInsertTypeStmt
-}
-
 type TrackCodeProvider interface {
 	Position() CodeInsertPosition
-	Comments() []string
 	Stmts() []string
 }
 
@@ -89,15 +59,14 @@ type TrackTemplateProvider interface {
 
 type InsertPosition struct {
 	position CodeInsertPosition
-	codeType CodeInsertType
 	line     int
 	column   int
 }
 
 type InsertPositions []InsertPosition
 
-func (p *InsertPositions) Insert(position CodeInsertPosition, codeType CodeInsertType, line int, column int) {
-	*p = append(*p, InsertPosition{position: position, codeType: codeType, line: line, column: column})
+func (p *InsertPositions) Insert(position CodeInsertPosition, line int, column int) {
+	*p = append(*p, InsertPosition{position: position, line: line, column: column})
 }
 
 func (p *InsertPositions) Sort() {
@@ -207,102 +176,6 @@ func (b BlockScopes) Search(line int) int {
 		}
 	}
 	return idx
-}
-
-// BlockScopesOfAST returns the block scopes of the ast
-func BlockScopesOfAST(filename string, content []byte) (BlockScopes, error) {
-
-	fset := token.NewFileSet()
-	blockScopes := BlockScopes{}
-	astFile, err := parser.ParseFile(fset, filename, content, parser.ParseComments)
-	if err != nil {
-		return nil, err
-	}
-	lines := strings.Split(string(content), "\n")
-	blockScopes = append(blockScopes, BlockScope{
-		StartLine: 1,
-		EndLine:   len(lines),
-	})
-	for _, decl := range astFile.Decls {
-		if declFunc, ok := decl.(*ast.FuncDecl); ok {
-			if declFunc.Body == nil {
-				continue
-			}
-			blockScopes = append(blockScopes, BlockScope{
-				StartLine: fset.Position(declFunc.Body.Lbrace).Line,
-				EndLine:   fset.Position(declFunc.Body.Rbrace).Line,
-			})
-
-			// Traverse the statements in the function body
-			for _, stmt := range declFunc.Body.List {
-				ast.Inspect(stmt, func(node ast.Node) bool {
-					if node == nil {
-						return false
-					}
-					switch stmt := node.(type) {
-					case *ast.IfStmt:
-						if stmt.Body != nil {
-							blockScopes = append(blockScopes, BlockScope{
-								StartLine: fset.Position(stmt.Body.Lbrace).Line,
-								EndLine:   fset.Position(stmt.Body.Rbrace).Line,
-							})
-							if stmt.Else != nil {
-								switch stmt.Else.(type) {
-								case *ast.BlockStmt:
-									block := stmt.Else.(*ast.BlockStmt)
-									blockScopes = append(blockScopes, BlockScope{
-										StartLine: fset.Position(block.Lbrace).Line,
-										EndLine:   fset.Position(block.Rbrace).Line,
-									})
-								}
-							}
-						}
-
-					case *ast.ForStmt:
-						if stmt.Body != nil {
-							blockScopes = append(blockScopes, BlockScope{
-								StartLine: fset.Position(stmt.Body.Lbrace).Line,
-								EndLine:   fset.Position(stmt.Body.Rbrace).Line,
-							})
-						}
-					case *ast.RangeStmt:
-						if stmt.Body != nil {
-							blockScopes = append(blockScopes, BlockScope{
-								StartLine: fset.Position(stmt.Body.Lbrace).Line,
-								EndLine:   fset.Position(stmt.Body.Rbrace).Line,
-							})
-						}
-
-					case *ast.CaseClause:
-						if stmt.Body != nil {
-							blockScopes = append(blockScopes, BlockScope{
-								StartLine: fset.Position(stmt.Body[0].Pos()).Line - 1,
-								EndLine:   fset.Position(stmt.Body[len(stmt.Body)-1].End()).Line + 1,
-							})
-						}
-
-					case *ast.CommClause:
-						if stmt.Body != nil {
-							blockScopes = append(blockScopes, BlockScope{
-								StartLine: fset.Position(stmt.Body[0].Pos()).Line - 1,
-								EndLine:   fset.Position(stmt.Body[len(stmt.Body)-1].End()).Line + 1,
-							})
-						}
-					case *ast.FuncLit:
-						if stmt.Body != nil {
-							blockScopes = append(blockScopes, BlockScope{
-								StartLine: fset.Position(stmt.Body.Lbrace).Line,
-								EndLine:   fset.Position(stmt.Body.Rbrace).Line,
-							})
-						}
-					}
-					return true
-				})
-			}
-		}
-	}
-	blockScopes.Sort()
-	return blockScopes, nil
 }
 
 // FunctionScopesOfAST returns the function scopes of the ast
@@ -695,4 +568,79 @@ func blockNodesOfFunction(stmts []ast.Stmt) ([]ast.Stmt, error) {
 		}
 	}
 	return blockNodes, nil
+}
+
+type scopeKey struct {
+	startLine, endLine int
+}
+
+type patchScope struct {
+	scopeKey
+	// indicesInfo[i]:
+	// 0: the line is not new line
+	// 1: the line is new line or comment but has not been marked inserted
+	// 2: the line has been marked inserted
+	marks []int // len(marks) == max(endLine - startLine - 1, 0)
+}
+
+func newTrackScopeIndex(startLine, endLine int) *patchScope {
+	length := endLine - startLine - 1
+	var marks []int
+	if length > 0 {
+		marks = make([]int, length)
+	}
+	return &patchScope{
+		scopeKey: scopeKey{startLine: startLine, endLine: endLine},
+		marks:    marks,
+	}
+}
+
+// initMarks initializes the marks of the track scope index
+// marks[i]: the i-th line has changed
+func (t *patchScope) initMarks(marks []bool) {
+	for i := range t.marks {
+		if marks[t.startLine+i+1] {
+			t.marks[i] = 1
+		}
+	}
+}
+
+func (t *patchScope) isInserted(line int) bool {
+	return t.marks[line-t.startLine-1] == 2
+}
+
+func (t *patchScope) isNewLine(line int) bool {
+	return t.marks[line-t.startLine-1] == 1
+}
+
+func (t *patchScope) canInsert(line int) bool {
+	if t.isInserted(line) {
+		return false
+	}
+	// Look forward. If a character that is not a new line is found, an insertion cannot be made.
+	// It should immediately be determined whether this line has already been marked as inserted.
+	// If so, return false; otherwise, return true.
+	for j := line - 1; j > t.startLine; j-- {
+		if t.isNewLine(j) {
+			continue
+		}
+		// j first landed here is the first non-new line
+		return !t.isInserted(j)
+	}
+	// The entire interval does not contain a non-new line, so it can be inserted.
+	return true
+}
+
+// markInserted marks the line and all new lines before and after it as inserted
+func (t *patchScope) markInserted(line int) {
+	if t.marks[line-t.startLine-1] == 1 {
+		t.marks[line-t.startLine-1] = 2
+	}
+	// Mark all new lines before and after this line as inserted
+	for i := line - 1; i > t.startLine && t.isNewLine(i); i-- {
+		t.marks[i-t.startLine-1] = 2
+	}
+	for i := line + 1; i < t.endLine && t.isNewLine(i); i++ {
+		t.marks[i-t.startLine-1] = 2
+	}
 }

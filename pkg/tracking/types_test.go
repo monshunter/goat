@@ -192,20 +192,20 @@ func TestBlockScopesSearch2(t *testing.T) {
 }
 
 func TestBlockScopesUnique(t *testing.T) {
-	// InsertPosition 结构是私有的，我们需要通过 InsertPositions 的方法来测试
+	// InsertPosition is private, we need to test it through the methods of InsertPositions
 	var positions InsertPositions
-	positions.Insert(CodeInsertPositionFront, CodeInsertTypeComment, 10, 5)
-	positions.Insert(CodeInsertPositionBack, CodeInsertTypeStmt, 20, 10)
-	positions.Insert(CodeInsertPositionFront, CodeInsertTypeComment, 10, 5) // 重复项
+	positions.Insert(CodeInsertPositionFront, 10, 5)
+	positions.Insert(CodeInsertPositionBack, 20, 10)
+	positions.Insert(CodeInsertPositionFront, 10, 5) // Duplicate item
 
-	// 测试前长度
+	// Test the length before unique
 	if len(positions) != 3 {
 		t.Errorf("Expected positions length to be 3, got %d", len(positions))
 	}
 
 	positions.Unique()
 
-	// 测试后长度
+	// Test the length after unique
 	if len(positions) != 2 {
 		t.Errorf("Expected unique positions length to be 2, got %d", len(positions))
 	}
@@ -213,57 +213,24 @@ func TestBlockScopesUnique(t *testing.T) {
 
 func TestBlockScopesReset(t *testing.T) {
 	var positions InsertPositions
-	positions.Insert(CodeInsertPositionFront, CodeInsertTypeComment, 10, 5)
-	positions.Insert(CodeInsertPositionBack, CodeInsertTypeStmt, 20, 10)
+	positions.Insert(CodeInsertPositionFront, 10, 5)
+	positions.Insert(CodeInsertPositionBack, 20, 10)
 
-	// 测试前长度
+	// Test the length before reset
 	if len(positions) != 2 {
 		t.Errorf("Expected positions length to be 2, got %d", len(positions))
 	}
 
 	positions.Reset()
 
-	// 测试后长度
+	// Test the length after reset
 	if len(positions) != 0 {
 		t.Errorf("Expected reset positions length to be 0, got %d", len(positions))
 	}
 }
 
-func TestBlockScopesOfGoAST(t *testing.T) {
-	// 简单测试文件
-	content := []byte(`
-package example
-
-func Example() {
-	if true {
-		// something
-	}
-	for i := 0; i < 10; i++ {
-		// loop
-	}
-}
-	`)
-
-	scopes, err := BlockScopesOfAST("example.go", content)
-	if err != nil {
-		t.Fatalf("Failed to get block scopes: %v", err)
-	}
-
-	// 至少应该有这些区块：整个文件、函数、if语句、for语句
-	if len(scopes) < 4 {
-		t.Errorf("Expected at least 4 block scopes, got %d", len(scopes))
-	}
-
-	// 测试区块是否已排序
-	for i := 1; i < len(scopes); i++ {
-		if scopes[i-1].StartLine > scopes[i].StartLine {
-			t.Errorf("Scopes not sorted at index %d", i)
-		}
-	}
-}
-
 func TestFunctionScopesOfGoAST(t *testing.T) {
-	// 简单测试文件
+	// Simple test file
 	content := []byte(`
 package example
 
@@ -284,15 +251,151 @@ var y = func() {
 		t.Fatalf("Failed to get function scopes: %v", err)
 	}
 
-	// 至少应该有这些区块：整个文件、Example函数、匿名函数x、匿名函数y
+	// At least these scopes should be present: the whole file, the Example function, the anonymous function x, the anonymous function y
 	if len(scopes) < 4 {
 		t.Errorf("Expected at least 4 function scopes, got %d", len(scopes))
 	}
 
-	// 测试区块是否已排序
+	// Test if the scopes are sorted
 	for i := 1; i < len(scopes); i++ {
 		if scopes[i-1].StartLine > scopes[i].StartLine {
 			t.Errorf("Scopes not sorted at index %d", i)
+		}
+	}
+}
+
+func TestTrackScopeIndex_CanInsertAndMarkInserted(t *testing.T) {
+	// Create a trackScopeIndex instance with interval (5,20)
+	tsi := &patchScope{
+		scopeKey: scopeKey{startLine: 5, endLine: 20},
+		marks:    make([]int, 14), // 20-5-1 = 14
+	}
+
+	// Simulate lineChanges (line numbers start from 1)
+	lineChanges := make([]bool, 21)
+	// Mark continuous block 1
+	lineChanges[6] = true
+	lineChanges[7] = true
+	lineChanges[8] = true
+	// Mark continuous block 2
+	lineChanges[10] = true
+	lineChanges[11] = true
+	lineChanges[12] = true
+	// Mark continuous block 3
+	lineChanges[14] = true
+	lineChanges[15] = true
+	lineChanges[16] = true
+	lineChanges[17] = true
+	lineChanges[18] = true
+
+	// Initialize marks
+	tsi.initMarks(lineChanges)
+
+	// Test if initialization is correct
+	for i := 6; i <= 8; i++ {
+		if !tsi.isNewLine(i) {
+			t.Fatalf("Line %d should be NewLine", i)
+		}
+	}
+	if tsi.isNewLine(9) {
+		t.Fatalf("Line 9 should not be NewLine")
+	}
+
+	// Test canInsert - Rows in consecutive block 1 should be insertable.
+	if !tsi.canInsert(7) {
+		t.Fatalf("Line 7 should be insertable")
+	}
+
+	// Mark continuous block 1 as inserted
+	tsi.markInserted(7)
+
+	// Now all lines in continuous block 1 should be marked as inserted
+	for i := 6; i <= 8; i++ {
+		if !tsi.isInserted(i) {
+			t.Fatalf("After marking, line %d should be inserted", i)
+		}
+		// Try inserting again should fail
+		if tsi.canInsert(i) {
+			t.Fatalf("After marking, line %d should not be insertable again", i)
+		}
+	}
+
+	// The continuous block 2 should still be insertable.
+	if !tsi.canInsert(11) {
+		t.Fatalf("Line 11 should be insertable")
+	}
+
+	// Mark continuous block 2 as inserted
+	tsi.markInserted(11)
+
+	// Continuous block 2 should be marked as inserted
+	for i := 10; i <= 12; i++ {
+		if !tsi.isInserted(i) {
+			t.Fatalf("After marking, line %d should be inserted", i)
+		}
+		if tsi.canInsert(i) {
+			t.Fatalf("After marking, line %d should not be insertable again", i)
+		}
+	}
+
+	// Continuous block 3 should still be insertable
+	if !tsi.canInsert(16) {
+		t.Fatalf("Line 16 should be insertable")
+	}
+
+	// Mark continuous block 3 as inserted
+	tsi.markInserted(16)
+
+	// Continuous block 3 should be marked as inserted
+	for i := 14; i <= 18; i++ {
+		if !tsi.isInserted(i) {
+			t.Fatalf("After marking, line %d should be inserted", i)
+		}
+		if tsi.canInsert(i) {
+			t.Fatalf("After marking, line %d should not be insertable again", i)
+		}
+	}
+
+	// Test if marking a previous continuous block does not affect the insertability of the next continuous block
+	tsi = &patchScope{
+		scopeKey: scopeKey{startLine: 5, endLine: 20},
+		marks:    make([]int, 14), // 20-5-1 = 14
+	}
+	tsi.initMarks(lineChanges)
+
+	// Mark only continuous block 1
+	tsi.markInserted(7)
+
+	// Continuous block 2 should still be insertable
+	if !tsi.canInsert(11) {
+		t.Fatalf("After marking block 1, block 2 (line 11) should still be insertable")
+	}
+
+	// Edge case: all lines are NewLine
+	allNewLines := &patchScope{
+		scopeKey: scopeKey{startLine: 30, endLine: 35},
+		marks:    make([]int, 4), // 35-30-1 = 4
+	}
+	allChanges := make([]bool, 36)
+	allChanges[31] = true
+	allChanges[32] = true
+	allChanges[33] = true
+	allChanges[34] = true
+	allNewLines.initMarks(allChanges)
+
+	// When all lines are NewLine, the first line should be insertable
+	if !allNewLines.canInsert(31) {
+		t.Fatalf("When all lines are NewLine, the first line should be insertable")
+	}
+
+	// After marking, other lines should not be insertable
+	allNewLines.markInserted(31)
+	for i := 31; i <= 34; i++ {
+		if !allNewLines.isInserted(i) {
+			t.Fatalf("When all lines are NewLine, line %d should be inserted", i)
+		}
+		if i > 31 && allNewLines.canInsert(i) {
+			t.Fatalf("When all lines are NewLine, line %d should not be insertable again", i)
 		}
 	}
 }

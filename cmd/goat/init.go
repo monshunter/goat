@@ -23,7 +23,7 @@ Options:
   --new <newBranch>                     New branch for comparison target (default: "HEAD"), valid values: [commit hash, branch name, tag name, "", HEAD]
   --app-name <appName>                  Application name (default: "example-app")
   --app-version <appVersion>            Application version (default: "1.0.0")
-  --granularity <granularity>           Granularity (line, block, scope, func) (default: "block")
+  --granularity <granularity>           Granularity (line, patch, scope, func) (default: "patch")
   --diff-precision <diffPrecision>      Diff precision (1~3) (default: 1)
   --threads <threads>                   Number of threads (default: 1)
   --race                                Enable race detection (default: false)
@@ -156,7 +156,7 @@ Examples:
 	cmd.Flags().String("new", "HEAD", "New branch for comparison target, valid values: [commit hash, branch name, tag name, '', HEAD]")
 	cmd.Flags().String("app-name", "example-app", "Application name")
 	cmd.Flags().String("app-version", "1.0.0", "Application version")
-	cmd.Flags().String("granularity", "block", "Granularity (line, block, scope, func)")
+	cmd.Flags().String("granularity", "patch", "Granularity (line, patch, scope, func)")
 	cmd.Flags().Int("diff-precision", 1, "Diff precision (1~3)")
 	cmd.Flags().Int("threads", 1, "Number of threads")
 	cmd.Flags().Bool("race", false, "Enable race detection")

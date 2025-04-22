@@ -169,7 +169,7 @@ func getMainPackageInfos(projectRoot string, goModule string, ignores []string) 
 	return mainPkgInfo.MainPackageInfos, nil
 }
 
-func applyMainEntry(cfg *config.Config, goModule string,
+func applyMainEntries(cfg *config.Config, goModule string,
 	mainPackageInfos []maininfo.MainPackageInfo,
 	componentTrackIdxs []componentTrackIdx) error {
 	importPath := filepath.Join(goModule, cfg.GoatPackagePath)

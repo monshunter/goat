@@ -64,17 +64,22 @@ var (
 
 type Granularity int
 
+// GranularityLine is the line granularity
 const (
 	_ Granularity = iota
+	// GranularityLine is the line granularity
 	GranularityLine
-	GranularityBlock
+	// GranularityPatch is the patch(diff patch in the same scope) granularity
+	GranularityPatch
+	// GranularityScope is the scope granularity
 	GranularityScope
+	// GranularityFunc is the func granularity
 	GranularityFunc
 )
 
 const (
 	GranularityLineStr  = "line"
-	GranularityBlockStr = "block"
+	GranularityPatchStr = "patch"
 	GranularityScopeStr = "scope"
 	GranularityFuncStr  = "func"
 )
@@ -128,8 +133,8 @@ func ToGranularity(s string) (Granularity, error) {
 	switch s {
 	case GranularityLineStr:
 		return GranularityLine, nil
-	case GranularityBlockStr:
-		return GranularityBlock, nil
+	case GranularityPatchStr:
+		return GranularityPatch, nil
 	case GranularityFuncStr:
 		return GranularityFunc, nil
 	case GranularityScopeStr:
@@ -142,7 +147,7 @@ func ToGranularity(s string) (Granularity, error) {
 // IsValid checks if the granularity is valid
 func (g Granularity) IsValid() bool {
 	switch g {
-	case GranularityLine, GranularityBlock, GranularityFunc, GranularityScope:
+	case GranularityLine, GranularityPatch, GranularityFunc, GranularityScope:
 		return true
 	default:
 		return false
@@ -151,7 +156,7 @@ func (g Granularity) IsValid() bool {
 
 // String returns the string representation of the granularity
 func (g Granularity) String() string {
-	return []string{GranularityLineStr, GranularityBlockStr, GranularityFuncStr, GranularityScopeStr}[g-1]
+	return []string{GranularityLineStr, GranularityPatchStr, GranularityFuncStr, GranularityScopeStr}[g-1]
 }
 
 // Int returns the integer representation of the granularity
@@ -164,9 +169,9 @@ func (g Granularity) IsLine() bool {
 	return g == GranularityLine
 }
 
-// IsBlock checks if the granularity is block
-func (g Granularity) IsBlock() bool {
-	return g == GranularityBlock
+// IsPatch checks if the granularity is block
+func (g Granularity) IsPatch() bool {
+	return g == GranularityPatch
 }
 
 // IsFunc checks if the granularity is func
@@ -280,7 +285,7 @@ type Config struct {
 // Validate validates the config
 func (c *Config) Validate() error {
 	if c.Granularity == "" {
-		c.Granularity = GranularityBlockStr
+		c.Granularity = GranularityPatchStr
 	}
 	_, err := ToGranularity(c.Granularity)
 	if err != nil {
@@ -371,7 +376,7 @@ func (c *Config) Validate() error {
 func (c *Config) GetGranularity() Granularity {
 	granularity, err := ToGranularity(c.Granularity)
 	if err != nil {
-		return GranularityBlock
+		return GranularityPatch
 	}
 	return granularity
 }

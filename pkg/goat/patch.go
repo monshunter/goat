@@ -275,8 +275,8 @@ func (f *PatchExecutor) apply() error {
 	}
 
 	// apply main entry
-	if err := applyMainEntry(f.cfg, f.goModule, f.mainPackageInfos, componentTrackIdxs); err != nil {
-		log.Errorf("Failed to apply main entry: %v", err)
+	if err := applyMainEntries(f.cfg, f.goModule, f.mainPackageInfos, componentTrackIdxs); err != nil {
+		log.Errorf("Failed to apply main entries: %v", err)
 		return err
 	}
 	return nil
