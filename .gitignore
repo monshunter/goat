@@ -1,4 +1,4 @@
-# 编译生成的二进制文件和构建目录
+# Compiled binary files and build directories
 /bin/
 *.exe
 *.exe~
@@ -6,17 +6,17 @@
 *.so
 *.dylib
 
-# 测试二进制文件和覆盖率文件
+# Test binary files and coverage files
 *.test
 *.out
 coverage.out
 coverage.html
 
-# Go特定的忽略
+# Go specific ignore
 /vendor/
 /Godeps/
 
-# IDE和编辑器文件
+# IDE and editor files
 .idea/
 .vscode/
 *.swp
@@ -24,20 +24,20 @@ coverage.html
 *~
 .DS_Store
 
-# 临时文件
+# Temporary files
 tmp/
 temp/
 *.tmp
 *.bak
 
-# 日志文件
+# Log files
 *.log
 logs/
 
-# 环境配置文件
+# Environment configuration files
 .env
 .env.local
 .env.*
 
-# 项目特定文件
-# 根据项目需要可能会添加更多特定忽略项
+# Project specific files
+# More specific ignore items may be added as needed

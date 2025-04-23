@@ -150,6 +150,11 @@ type ComponentResult struct {
 }
 // Results struct
 type Results struct {
+	// name
+	Name string ` + "`json:\"name\"`" + `
+	// version
+	Version string ` + "`json:\"version\"`" + `
+	// results
 	Results []ComponentResult ` + "`json:\"results\"`" + `
 }
 // ServeHTTP start HTTP service
@@ -261,7 +266,7 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	// output JSON
-	jsonData, _ := json.Marshal(Results{Results: results})
+	jsonData, _ := json.Marshal(Results{Name: NAME, Version: VERSION, Results: results})
 	w.Write(jsonData)
 }
 `

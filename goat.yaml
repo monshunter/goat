@@ -10,19 +10,24 @@ appName: example-app
 ## App version
 appVersion: 1.0.0
 
-## Stable branch, the valid values are:
+## Old branch name (for comparison base)
+## Valid values are:
 ## 1. commit hash
 ## 2. branch name
 ## 3. tag name
-## 4. "." or "HEAD" means the current branch
-stableBranch: main
+## 4. ""  or "HEAD" means the current branch
+## 5. "INIT" means the current repository is a new one, no old branch
+## default: "main"
+oldBranch: main
 
-## Publish branch, the valid values are:
+## New branch name (for comparison target)
+## Valid values are:
 ## 1. commit hash
 ## 2. branch name
 ## 3. tag name
-## 4. "." or "HEAD" means the current branch
-publishBranch: HEAD
+## 4. "" or "HEAD" means the current branch
+## default: "HEAD"
+newBranch: HEAD
 
 ## Ignore files and directories
 ignores:
@@ -43,22 +48,41 @@ goatPackageName: goat
 ## Goat package alias
 goatPackageAlias: goat
 
-## Goat package path, where goat is installed in your project
+## Goat package path, where goat package is installed in your project
 goatPackagePath: goat
 
-## Granularity ([line, block, scope, func], default: block)
-granularity: block
+## Granularity ([line, patch, scope, func], default: patch)
+## granularity = line: Track changes at the line level when the line is modified
+## granularity = patch: Track changes at the patch(diff patch in the same scope) level when the patch is modified
+## granularity = scope: Track changes at the scope level when the scope is modified
+## granularity = func: Track changes at the function level when the function is modified
+granularity: patch
 
-## Diff precision (1~2, default: 1)
+## Diff precision (1~3, default: 1)
+## diffPrecision = 1: Uses git blame to get file change history and generates tracking information based on it,
+## highest precision, worst performance
+## diffPrecision = 2: Uses git diff to get file change history and generates tracking information (tracks file
+## renames or moves), medium precision, normal performance (100 times faster than diffPrecision = 1), in this mode,
+## some renamed files may be granted as new files
+## diffPrecision = 3: Uses git diff to get file change history and generates tracking information (cannot track
+## file renames or moves), lowest precision, best performance (1 ~ 10 times faster than diffPrecision = 2), 
+## in this mode, all renamed files are granted as new files
 diffPrecision: 1
 
 ## Threads (default: 1)
 threads: 1
 
 ## Race (default: false)
+## race: true, enable race detection, performance worse
+## race: false, disable race detection, performance better
 race: false
 
 ## Main entries to track (default: all)
+## Specify relative paths to main packages from project root
+## Examples:
+##  - "*" (track all main packages)
+##  - "cmd/server" (track only the main package in cmd/server)
+##  - "cmd/client,cmd/server" (track multiple specific main packages)
 mainEntries:
   - "*"
 

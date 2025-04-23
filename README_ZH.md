@@ -189,10 +189,12 @@ API返回JSON格式的响应，包含以下信息：
 
 ```json
 {
+  "name": "example-app", 
+  "version": "1.0.0",
   "results": [
     {
-      "id": 0,
-      "name": "组件名称",
+      "id": 0,   // 组件id
+      "name": "组件名称", // 组件名字
       "metrics": {
         "total": 10,         // 总埋点数
         "covered": 5,         // 已覆盖的埋点数

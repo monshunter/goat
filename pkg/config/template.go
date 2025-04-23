@@ -56,9 +56,11 @@ granularity: {{.Granularity}}
 ## diffPrecision = 1: Uses git blame to get file change history and generates tracking information based on it,
 ## highest precision, worst performance
 ## diffPrecision = 2: Uses git diff to get file change history and generates tracking information (tracks file
-## renames or moves), medium precision, better performance
+## renames or moves), medium precision, normal performance (100 times faster than diffPrecision = 1), in this mode,
+## some renamed files may be granted as new files
 ## diffPrecision = 3: Uses git diff to get file change history and generates tracking information (cannot track
-## file renames or moves), lowest precision, best performance
+## file renames or moves), lowest precision, best performance (1 ~ 10 times faster than diffPrecision = 2), 
+## in this mode, all renamed files are granted as new files
 diffPrecision: {{.DiffPrecision}}
 
 ## Threads (default: 1)

@@ -189,10 +189,12 @@ The API returns responses in JSON format, containing the following information:
 
 ```json
 {
+  "name": "example-app", 
+  "version": "1.0.0",
   "results": [
     {
-      "id": 0,
-      "name": "ComponentName",
+      "id": 0, // component id
+      "name": "ComponentName", // component name
       "metrics": {
         "total": 10,         // Total number of instrumentation points
         "covered": 5,         // Number of covered instrumentation points
