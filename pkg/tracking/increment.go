@@ -14,7 +14,7 @@ import (
 
 	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/diff"
-	"github.com/monshunter/goat/pkg/tracking/increament"
+	increament "github.com/monshunter/goat/pkg/tracking/increment"
 	"github.com/monshunter/goat/pkg/utils"
 )
 

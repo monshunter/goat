@@ -13,7 +13,7 @@ import (
 	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/diff"
 	"github.com/monshunter/goat/pkg/maininfo"
-	"github.com/monshunter/goat/pkg/tracking/increament"
+	"github.com/monshunter/goat/pkg/tracking/increment"
 	"github.com/monshunter/goat/pkg/utils"
 )
 
@@ -185,7 +185,7 @@ func applyMainEntries(cfg *config.Config, goModule string,
 		if len(trackIdxs) == 0 {
 			continue
 		}
-		codes := increament.GetMainEntryInsertData(cfg.GoatPackageAlias, i)
+		codes := increment.GetMainEntryInsertData(cfg.GoatPackageAlias, i)
 		_, err := mainInfo.ApplyMainEntry(cfg.PrinterConfig(), cfg.GoatPackageAlias, importPath, codes)
 		if err != nil {
 			log.Errorf("failed to apply main entry: %v", err)
@@ -223,7 +223,7 @@ func handleGoatDelete(cfg *printer.Config, fileContents string, goatImportPath s
 func handleGoatInsert(cfg *printer.Config, fileContents string, goatImportPath string, goatPackageAlias string) (int, string, error) {
 	count, content, err := utils.ReplaceWithRegexp(config.TrackInsertRegexp, fileContents,
 		func(older string) (newer string) {
-			return increament.GetPackageInsertDataString()
+			return increment.GetPackageInsertDataString()
 		})
 	if err != nil {
 		log.Errorf("failed to handle goat insert: %v", err)
@@ -245,7 +245,7 @@ func handleGoatInsert(cfg *printer.Config, fileContents string, goatImportPath s
 func resetGoatGenerate(fileContents string) (int, string, error) {
 	return utils.ReplaceWithRegexp(config.TrackGenerateEndRegexp, fileContents,
 		func(older string) (newer string) {
-			return increament.GetPackageInsertDataString()
+			return increment.GetPackageInsertDataString()
 		})
 }
 

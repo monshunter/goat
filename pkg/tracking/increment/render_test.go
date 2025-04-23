@@ -1,4 +1,4 @@
-package increament
+package increment
 
 import (
 	"os"

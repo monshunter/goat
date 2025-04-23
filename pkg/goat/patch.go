@@ -7,10 +7,10 @@ import (
 	"sync"
 
 	"github.com/monshunter/goat/pkg/log"
+	"github.com/monshunter/goat/pkg/tracking/increment"
 
 	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/maininfo"
-	"github.com/monshunter/goat/pkg/tracking/increament"
 	"github.com/monshunter/goat/pkg/utils"
 )
 
@@ -224,16 +224,16 @@ func (f *PatchExecutor) replaceTracks() (int, error) {
 	slices.Sort(files)
 	for _, file := range files {
 		content := f.filesContents[file]
-		count, newContent, err := utils.Replace(content, increament.TrackStmtPlaceHolder,
-			increament.IncreamentReplaceStmt(f.cfg.GoatPackageAlias, start))
+		count, newContent, err := utils.Replace(content, increment.TrackStmtPlaceHolder,
+			increment.IncreamentReplaceStmt(f.cfg.GoatPackageAlias, start))
 		if err != nil {
 			log.Errorf("Failed to replace track stmt: %v", err)
 			return 0, err
 		}
 		f.fileTrackIdStartMap[file] = trackIdxInterval{start: start, end: start + count - 1}
 		start += count
-		_, newContent, err = utils.Replace(newContent, fmt.Sprintf("%q", increament.TrackImportPathPlaceHolder),
-			increament.IncreamentReplaceImport(f.cfg.GoatPackageAlias, importPath))
+		_, newContent, err = utils.Replace(newContent, fmt.Sprintf("%q", increment.TrackImportPathPlaceHolder),
+			increment.IncreamentReplaceImport(f.cfg.GoatPackageAlias, importPath))
 		if err != nil {
 			log.Errorf("Failed to replace track import: %v", err)
 			return 0, err
@@ -261,7 +261,7 @@ func (f *PatchExecutor) apply() error {
 
 	// apply goat_generated.go
 	componentTrackIdxs := getComponentTrackIdxs(f.fileTrackIdStartMap, f.mainPackageInfos)
-	values := increament.NewValues(f.cfg)
+	values := increment.NewValues(f.cfg)
 	for _, component := range componentTrackIdxs {
 		values.AddComponent(component.componentId, component.component, component.trackIdx)
 	}

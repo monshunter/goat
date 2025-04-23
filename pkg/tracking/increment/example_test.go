@@ -1,14 +1,12 @@
 //go:build example
 // +build example
 
-package increament_test
+package increment_test
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/monshunter/goat/pkg/tracking/increament"
 )
 
 // This is an example of how to use the Values type to generate tracking code

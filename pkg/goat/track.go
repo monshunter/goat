@@ -11,7 +11,7 @@ import (
 	"github.com/monshunter/goat/pkg/diff"
 	"github.com/monshunter/goat/pkg/maininfo"
 	"github.com/monshunter/goat/pkg/tracking"
-	"github.com/monshunter/goat/pkg/tracking/increament"
+	"github.com/monshunter/goat/pkg/tracking/increment"
 	"github.com/monshunter/goat/pkg/utils"
 )
 
@@ -58,7 +58,7 @@ func (p *TrackExecutor) Run() error {
 
 	componentTrackIdxs := getComponentTrackIdxs(p.fileTrackIdStartMap, p.mainPackageInfos)
 
-	values := increament.NewValues(p.cfg)
+	values := increment.NewValues(p.cfg)
 	for _, component := range componentTrackIdxs {
 		values.AddComponent(component.componentId, component.component, component.trackIdx)
 	}
@@ -180,7 +180,7 @@ func (p *TrackExecutor) initTracksParallel() error {
 func (p *TrackExecutor) handleDiffChange(change *diff.FileChange) (tracking.Tracker, error) {
 	granularity := p.cfg.GetGranularity()
 	tracker, err := tracking.NewIncrementalTrack(".", change,
-		increament.TrackImportPathPlaceHolder, increament.GetPackageInsertStmts(),
+		increment.TrackImportPathPlaceHolder, increment.GetPackageInsertStmts(),
 		granularity, p.cfg.PrinterConfig())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create incremental tracker: %w", err)
@@ -199,16 +199,16 @@ func (p *TrackExecutor) replaceTracks() (int, error) {
 	start := 1
 	importPath := utils.GoatPackageImportPath(p.goModule, p.cfg.GoatPackagePath)
 	for i, tracker := range p.trackers {
-		count, newContent, err := utils.Replace(string(tracker.Content()), increament.TrackStmtPlaceHolder,
-			increament.IncreamentReplaceStmt(p.cfg.GoatPackageAlias, start))
+		count, newContent, err := utils.Replace(string(tracker.Content()), increment.TrackStmtPlaceHolder,
+			increment.IncreamentReplaceStmt(p.cfg.GoatPackageAlias, start))
 		if err != nil || count != tracker.Count() {
 			return 0, fmt.Errorf("failed to replace statements in %s: expected=%d, actual=%d: %w",
 				tracker.Target(), tracker.Count(), count, err)
 		}
 		p.fileTrackIdStartMap[p.changes[i].Path] = trackIdxInterval{start: start, end: start + count - 1}
 		start += count
-		_, newContent, err = utils.Replace(newContent, fmt.Sprintf("%q", increament.TrackImportPathPlaceHolder),
-			increament.IncreamentReplaceImport(p.cfg.GoatPackageAlias, importPath))
+		_, newContent, err = utils.Replace(newContent, fmt.Sprintf("%q", increment.TrackImportPathPlaceHolder),
+			increment.IncreamentReplaceImport(p.cfg.GoatPackageAlias, importPath))
 		if err != nil {
 			return 0, fmt.Errorf("failed to replace import in %s: %w", tracker.Target(), err)
 		}
