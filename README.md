@@ -131,6 +131,30 @@ Remove all inserted tracking code.
 goat --version
 ```
 
+## 📚 Examples
+
+GOAT provides several detailed usage examples to help you better understand its features:
+
+1. [Track Command Example](examples/track_example.md) - How to track code changes and insert tracing code
+2. [Patch Command Example](examples/patch_example.md) - How to process manual tracing markers
+3. [Clean Command Example](examples/clean_example.md) - How to clean up tracing code
+4. [Granularity Examples](examples/granularity_example.md) - Demonstrates tracing at different granularities
+
+For more examples, check the [examples directory](examples/).
+
+## 🖥 Application Scenarios
+
+- Code coverage tracking in gray releases (blue-green deployment, canary release)
+- Execution path monitoring for new features
+- Validation testing for refactored code
+- Impact analysis of performance changes
+- Service upgrade tracking in microservice architectures
+
+## 🔋 Development Environment Requirements
+
+- Go 1.21+
+- Git
+
 ## 📊 Instrumentation Data Monitoring
 
 ### HTTP Service
@@ -324,19 +348,6 @@ The following markers are used internally by GOAT and should not be manually add
 ## 📄 License
 
 The source code of `GOAT` is open-sourced under the [MIT License](LICENSE).
-
-## 🖥 Application Scenarios
-
-- Code coverage tracking in gray releases (blue-green deployment, canary release)
-- Execution path monitoring for new features
-- Validation testing for refactored code
-- Impact analysis of performance changes
-- Service upgrade tracking in microservice architectures
-
-## 🔋 Development Environment Requirements
-
-- Go 1.21+
-- Git
 
 ## 💎 Contribution
 
