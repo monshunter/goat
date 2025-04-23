@@ -1,404 +1,349 @@
-# GOAT - Golang应用灰度追踪工具
+# GOAT - Golang Application Tracing
 
-## 1. 项目概述
+[![Go Report Card](https://goreportcard.com/badge/github.com/monshunter/goat)](https://goreportcard.com/report/github.com/monshunter/goat)
+[![GoDoc](https://godoc.org/github.com/monshunter/goat?status.svg)](https://godoc.org/github.com/monshunter/goat)
+[![License](https://img.shields.io/github/license/monshunter/goat)](https://github.com/monshunter/goat/blob/main/LICENSE)
 
-### 1.1 背景
+[中文文档](README_ZH.md)
 
-在对软件应用进行灰度发布（如红蓝部署、金丝雀发布）过程中，开发和运维人员通常依赖外部指标（如报错率、业务指标、资源消耗等）来决定是否推进灰度流程。然而，从第一性原理考虑，稳健的决策依据应当是由内而外的：确保灰度过程中，所有增量功能都被覆盖测试，且外部指标保持在预期范围内。
+## 📖 Introduction
 
-GOAT (Golang Application Tracing) 项目旨在通过自动化埋点方式，提供可靠的内部依据，帮助开发人员评估灰度发布的覆盖情况，从而做出更加安全、可靠的灰度推进决策。
+`GOAT` (Golang Application Tracing) is a high-performance code tracing tool for gray releases, designed specifically for Go applications. It automatically identifies and tracks the execution of incremental code, helping developers make more reliable decisions during the gray release process. Through automated instrumentation and real-time tracking, GOAT provides internal evidence to ensure that incremental features are thoroughly tested during the gray release process.
 
-### 1.2 项目目标
+## 🚀 Features
 
-- 开发一个自动化埋点工具（命令行工具），为Go语言项目提供增量代码执行追踪能力
-- 提供简单易用的API，便于应用程序集成埋点功能
-- 通过内嵌HTTP服务，实时展示埋点覆盖状态
-- 支持开发人员自定义埋点策略
-- 最小化埋点代码对应用性能的影响
+* Automatically identifies effective incremental code, precisely locating modification points
+* Intelligent instrumentation system, supporting tracking of explicit and implicit branches
+* Provides code tracking capabilities at multiple granularity levels (line, patch, scope, function)
+* Supports multiple precision modes for differences, adapting to code changes of varying complexity
+* Embedded HTTP service, displaying instrumentation coverage status in real-time
+* Efficient resource utilization, minimizing impact on application performance
+* Simple and easy-to-use command-line tools and API interfaces
+* Multi-threading support to improve processing speed
+* Support for custom instrumentation strategies
 
-## 2. 功能需求
+## 💡 How GOAT Works
 
-### 2.1 核心功能
+### Workflow
 
-#### 2.1.1 有效增量代码的识别
+1. **Initialization**: Configure project parameters and generate a configuration file
+2. **Difference Analysis**: Analyze code differences between stable and release branches
+3. **Intelligent Instrumentation**: Automatically insert tracking code into incremental code
+4. **Runtime Monitoring**: Collect instrumentation execution data during application runtime
+5. **Status Display**: Display instrumentation coverage status through HTTP interface
 
-**有效增量代码**定义为：本次发布相对于稳定版本的、可以被执行的函数体或方法体内部的新增或修改代码。
+## 🧰 Installation
 
-以下内容**不**属于有效增量代码：
-- 被删除的代码
-- 非 *.go 文件的增量代码
-- 测试文件（*_test.go）中的增量代码
-- 新增的注释、空行
-- 行尾新增的注释（代码本身未变）
-- 函数/方法体外部的增量代码（如全局常量、变量、类型、接口和函数声明等）
-- 函数/方法内部的类型声明
-- 移动的文件或者重命名的文件
+### Method 1: Install using Go Install (Recommended):
 
-#### 2.1.2 逻辑分支的识别与埋点
-
-GOAT将识别并对以下类型的逻辑分支进行埋点：
-
-**显式分支**：
-- if-else 分支
-- switch-case 分支
-- select-case 分支
-
-**隐式分支**：
-- 函数体中连续的非分支语句块
-
-#### 2.1.3 埋点规则
-
-- **前置埋点原则**：在分支代码块的开始处插入埋点代码
-- **单次埋点原则**：每个逻辑分支只进行一次埋点
-- **条件变更特殊处理**：当分支条件（如if条件表达式）发生变更时，需对其影响的所有一级分支额外插入埋点
-- **空分支处理**：空select{}或空switch{}视为普通语句，使用前置埋点
-
-#### 2.1.4 埋点覆盖状态追踪
-
-- 通过内嵌HTTP服务提供埋点状态查询接口
-- 支持按组件、文件、函数等维度聚合埋点覆盖状态
-- 支持埋点覆盖率统计
-
-### 2.2 命令行工具
-
-#### 2.2.1 工具名称
-
-```
-goat
+```bash
+go install github.com/monshunter/goat/cmd/goat@latest
 ```
 
-#### 2.2.2 子命令
+Make sure your `$GOPATH/bin` directory is added to your system PATH.
 
-1. **init** - 插入埋点
+### Method 2: Build and install from source:
 
-```
-goat init <project> --stable master --publish "release-1.32"
-```
-
-2. **patch** - 插入埋点
-
-```
-goat patch <project> 
+```bash
+git clone https://github.com/monshunter/goat.git
+cd goat
+make install
 ```
 
-参数说明：
-- `<project>`：目标项目的路径，即/path/to/project
+This will compile the binary and install it in the `$GOPATH/bin` directory.
 
-3. **fix** - 修复埋点
+### Method 3: Build without installing:
 
-```
-goat fix <project>
-```
-
-4. **clean** - 清理埋点
-
-```
-goat clean <project>
+```bash
+git clone https://github.com/monshunter/goat.git
+cd goat
+make build
 ```
 
-### 2.3 埋点API
+The built binary will be in the `bin` directory.
 
-GOAT将提供简洁的埋点API，自动生成在项目中的`/goat`目录下（可通过GOAT_DIR环境变量修改）。
+## 🛠 Usage
 
-#### 2.3.1 API结构
+### Initialize Project
 
-```go
-package goat
+Execute in the root directory of your Go project:
 
-// 埋点状态记录，使用切片存储以提高性能
-var embeddings []bool
-
-// 埋点ID类型
-type EmbeddingID int
-
-// 应用组件类型
-type Composer int
-
-// 埋点函数，用于记录执行路径
-func Track(id EmbeddingID)
-
-// 启动HTTP服务，展示埋点状态
-func ServeHTTP(composer Composer)
+```bash
+goat init
 ```
 
-#### 2.3.2 自动生成的配置
+This will generate the default configuration file `goat.yaml`. You can customize configuration options:
 
-工具会自动生成以下内容：
-- 埋点ID常量定义
-- 组件与埋点ID的映射关系
-- HTTP服务端点处理函数
-
-## 3. 埋点示例
-
-### 3.1 简单语句埋点
-
-**原始代码**:
-```go
-func example1() {
-    x, y, z := 0, 1, 2
-    x, y, z = x + y, y + z, z + x
-}
+```bash
+goat init --old main --new HEAD --app-name "my-app" --granularity func
 ```
 
-**变更代码**:
-```go
-func example1() {
-    x, y, z := 0, 1, 2
-    x, y, z = x + y, y + z, z + x
-    fmt.Println("分支1")
-    fmt.Println(x, y, z)
-}
+### Configuration Options
+
+Customize configuration by using various options when calling `goat init`:
+
+```bash
+goat init --help
 ```
 
-**埋点后代码**:
-```go
-func example1() {
-    x, y, z := 0, 1, 2
-    x, y, z = x + y, y + z, z + x
-    // +goat
-    goat.Track(goat.EmbeddingID_1)
-    fmt.Println("分支1")
-    fmt.Println(x, y, z)
-}
+Common options include:
+- `--old <oldBranch>`: Stable branch (default: "main")
+- `--new <newBranch>`: Release branch (default: "HEAD")
+- `--app-name <appName>`: Application name (default: "example-app")
+- `--granularity <granularity>`: Granularity (line, patch, scope, func) (default: "patch")
+- `--diff-precision <diffPrecision>`: Difference precision (1~3) (default: 1)
+- `--threads <threads>`: Number of threads (default: 1)
+- `--ignores <ignores>`: List of files/directories to ignore, comma-separated
+
+### Insert Tracking Code
+
+```bash
+goat track
 ```
 
-### 3.2 条件分支埋点
+This will analyze incremental code in the project and automatically insert tracking instrumentation. After running this command, you can:
+- Use git diff or other tools to view changes
+- Build and test your application to verify instrumentation
+- If the project already has tracking code, run `goat clean` first
 
-**原始代码**:
-```go
-func example2() {
-    x, y, z := 0, 1, 2
-    x, y, z = x + y, y + z, z + x
-    if x + y + z == 0 {
-        fmt.Println(x + y + z)
+### Handle Manual Instrumentation Markers
+
+```bash
+goat patch
+```
+
+This command is used to process manual instrumentation markers in the project, mainly handling:
+- `// +goat:delete` markers - Delete code segments marked for deletion
+- `// +goat:insert` markers - Insert code at marked positions
+If you have manually added or removed instrumentation, you can run this command to update the instrumentation implementation.
+
+### Clean Tracking Code
+
+```bash
+goat clean
+```
+
+Remove all inserted tracking code.
+
+### View Version Information
+
+```bash
+goat --version
+```
+
+## 📊 Instrumentation Data Monitoring
+
+### HTTP Service
+
+After inserting instrumentation code with GOAT, an HTTP service will automatically start when your application runs, providing real-time instrumentation coverage status. By default, this service runs on port `57005`.
+
+You can customize the port by setting the environment variable `GOAT_PORT`:
+
+```bash
+export GOAT_PORT=8080
+```
+
+### API Endpoints
+
+GOAT provides the following API endpoints for querying instrumentation coverage status:
+
+#### 1. Get Instrumentation Status for All Components
+
+```
+GET http://localhost:57005/metrics
+```
+
+#### 2. Get Instrumentation Status for a Specific Component
+
+```
+GET http://localhost:57005/metrics?component=COMPONENT_ID
+```
+
+Where `COMPONENT_ID` is the component's ID (usually an integer starting from 0) or the component name.
+
+#### 3. Get Instrumentation Status for Multiple Components
+
+```
+GET http://localhost:57005/metrics?component=COMPONENT_ID1,COMPONENT_ID2
+```
+
+#### 4. Sort Results in Different Orders
+
+```
+# Sort by execution count in ascending order
+GET http://localhost:57005/metrics?component=COMPONENT_ID&order=0
+
+# Sort by execution count in descending order
+GET http://localhost:57005/metrics?component=COMPONENT_ID&order=1
+
+# Sort by ID in ascending order
+GET http://localhost:57005/metrics?component=COMPONENT_ID&order=2
+
+# Sort by ID in descending order
+GET http://localhost:57005/metrics?component=COMPONENT_ID&order=3
+```
+
+### Response Format
+
+The API returns responses in JSON format, containing the following information:
+
+```json
+{
+  "results": [
+    {
+      "id": 0,
+      "name": "ComponentName",
+      "metrics": {
+        "total": 10,         // Total number of instrumentation points
+        "covered": 5,         // Number of covered instrumentation points
+        "coveredRate": 50,    // Coverage rate (percentage)
+        "items": [
+          {
+            "id": 1,          // Instrumentation ID
+            "name": "TRACK_ID_1", // Instrumentation name
+            "count": 3        // Execution count
+          }
+          // More instrumentation points...
+        ]
+      }
     }
+    // More components...
+  ]
 }
 ```
 
-**变更代码**:
-```go
-func example2() {
-    x, y, z := 0, 1, 2
-    x, y, z = x + y, y + z, z + x
-    fmt.Println("分支1")
-    if x + y + z != 0 {
-        fmt.Println(x + y + z)
-        fmt.Println("分支2")
-    } else {
-        fmt.Println("分支3")
-    }
-    fmt.Println("分支4")
-    fmt.Println(x, y, z)
-}
+### Usage Examples
+
+1. View all instrumentation status using curl:
+
+```bash
+curl http://localhost:57005/metrics | jq
 ```
 
-**埋点后代码**:
-```go
-func example2() {
-    x, y, z := 0, 1, 2
-    x, y, z = x + y, y + z, z + x
-    // +goat
-    goat.Track(goat.EmbeddingID_1)
-    fmt.Println("分支1")
-    if x + y + z != 0 {
-        // +goat - 条件变更埋点
-        goat.Track(goat.EmbeddingID_2)
-        // +goat - 代码块变更埋点
-        goat.Track(goat.EmbeddingID_3)
-        fmt.Println(x + y + z)
-        fmt.Println("分支2")
-    } else {
-        // +goat - 条件变更埋点
-        goat.Track(goat.EmbeddingID_4)
-        // +goat - 代码块变更埋点
-        goat.Track(goat.EmbeddingID_5)
-        fmt.Println("分支3")
-    }
-    // +goat
-    goat.Track(goat.EmbeddingID_6)
-    fmt.Println("分支4")
-    fmt.Println(x, y, z)
-}
+2. View instrumentation status for a specific component using curl:
+
+```bash
+curl http://localhost:57005/metrics?component=0 | jq
 ```
 
-## 4. 实现方案
+### Observation and Analysis
 
-### 4.1 技术路线
+1. **Real-time Monitoring**: View instrumentation coverage at any time while the application is running
+2. **Gray Release Decision**: Evaluate whether to proceed with the next step of gray release based on instrumentation coverage
+3. **Problem Analysis**: Identify code paths that have not been executed, locate potential issues
+4. **Coverage Reporting**: Generate coverage reports for team review and quality assurance
 
-- 使用Go语言AST解析实现代码分析与埋点
-- 利用Git获取代码差异（使用go-git实施，避免在代码中调用git diff或者git blame 等外部命令）
-- 使用标准库实现HTTP服务
-- 零依赖设计，最小化对用户项目的影响
-- 使用goat patch命令时，应新建一个分支，避免污染原分支
+## 🌐 Environment Variables
 
-### 4.2 埋点文件结构
+The GOAT project supports configuration through environment variables. The following table lists all available environment variables and their functions:
 
-**示例：/goat/embeddings.go**
+| Environment Variable | Description | Default Value | Use Case |
+| --- | --- | --- | --- |
+| `GOAT_PORT` | Sets the port for the instrumentation HTTP service | `57005` | When the default port is occupied or a custom port is needed |
+| `GOAT_METRICS_IP` | Sets the IP address that the instrumentation HTTP service binds to | `127.0.0.1` | When access from non-local machines is needed, can be set to `0.0.0.0` |
+| `GOAT_CONFIG` | Specifies the path to the configuration file | `goat.yaml` | When a non-default location for the configuration file is needed |
+| `GOAT_STACK_TRACE` | Whether to display stack traces when fatal errors occur | `false` | Set to `1` or `true` or `yes` when debugging issues |
 
-```go
-package goat
+### Examples of Using Environment Variables
 
-import (
-    "encoding/json"
-    "fmt"
-    "log"
-    "net/http"
-    "sync/atomic"
-)
+1. Modify HTTP service port:
 
-const AppVersion = "v1.0.0"  // 应用版本
-const AppName = "example-app"  // 应用名称
-
-type EmbeddingID = int
-
-const (
-    EmbeddingID_Start = iota
-    EmbeddingID_1
-    EmbeddingID_2
-    EmbeddingID_3
-    EmbeddingID_4
-    // ...其他埋点ID
-    EmbeddingID_End
-)
-
-// 被手动删除的埋点ID列表
-var InvalidEmbeddingID = []EmbeddingID{
-    // 用户手动删除的埋点ID会记录在这里
-}
-
-// 埋点ID名称
-var EmbeddingIDNames []string
-
-// 埋点状态记录 - 使用切片替代map以提高性能
-var embeddings []int32
-
-// 初始化埋点
-func init() {
-    EmbeddingIDNames = make([]string, EmbeddingID_End+1)
-    for i := 1; i <= EmbeddingID_End; i++ {
-        EmbeddingIDNames[i] = fmt.Sprintf("EmbeddingID_%d", i)
-    }
-
-    // 初始化埋点状态切片
-    embeddings = make([]int32, EmbeddingID_End+1)
-}
-
-// 埋点函数
-func Track(id EmbeddingID) {
-    if id > 0 && id < EmbeddingID_End {
-        atomic.StoreInt32(&embeddings[id], 1)
-    }
-}
-
-// 应用组件类型
-type Composer = int
-
-const (
-    _ = iota
-    ComposerBin_1  // 组件1
-    ComposerBin_2  // 组件2
-)
-
-// 组件1的埋点ID列表
-var ComposerBin_1_EmbeddingID = []EmbeddingID{
-    EmbeddingID_1,
-    EmbeddingID_2,
-}
-
-// 组件2的埋点ID列表
-var ComposerBin_2_EmbeddingID = []EmbeddingID{
-    EmbeddingID_3,
-    EmbeddingID_4,
-}
-
-// 组件与埋点ID的映射关系
-var ComposersEmbeddingID = [][]EmbeddingID{
-    ComposerBin_1: ComposerBin_1_EmbeddingID,
-    ComposerBin_2: ComposerBin_2_EmbeddingID,
-}
-
-// 启动HTTP服务
-func ServeHTTP(composer Composer) {
-    go func() {
-        system := http.NewServeMux()
-        system.HandleFunc("/", homeHandler)
-        system.HandleFunc("/health", healthHandler)
-        system.HandleFunc("/embeddings", embeddingsHandler)
-
-        port := ":8080"
-        fmt.Printf("Goat埋点服务已启动: http://localhost%s\n", port)
-        log.Fatal(http.ListenAndServe(port, system))
-    }()
-}
-
-// 主页处理函数
-func homeHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "text/html")
-    w.WriteHeader(http.StatusOK)
-    fmt.Fprintf(w, "<h1>GOAT埋点状态</h1><p>请访问 <a href='/embeddings'>/embeddings</a> 查看详细埋点状态</p>")
-}
-
-// 健康检查处理函数
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusOK)
-    fmt.Fprintf(w, `{"status":"healthy","version":"%s","app":"%s"}`, AppVersion, AppName)
-}
-
-// 埋点状态处理函数
-func embeddingsHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusOK)
-
-    // 生成埋点状态JSON
-    details := make(map[string]bool)
-    covered := 0
-
-    for id := EmbeddingID_Start + 1; id < EmbeddingID_End; id++ {
-        isTracked := atomic.LoadInt32(&embeddings[id]) == 1
-        details[EmbeddingIDNames[id]] = isTracked
-        if isTracked {
-            covered++
-        }
-    }
-
-    result := map[string]interface{}{
-        "total": EmbeddingID_End - EmbeddingID_Start - 1,
-        "covered": covered,
-        "details": details,
-    }
-
-    // 输出JSON
-    jsonData, _ := json.Marshal(result)
-    w.Write(jsonData)
-}
+```bash
+export GOAT_PORT=8080
 ```
 
-### 4.3 集成示例
+2. Allow access to the instrumentation service from other machines:
 
-**在main函数中集成**:
-
-```go
-// bin/ComposerBin_1/main.go
-func main() {
-    // 启动埋点HTTP服务
-    goat.ServeHTTP(goat.ComposerBin_1)
-
-    // 业务代码...
-}
+```bash
+export GOAT_METRICS_IP=0.0.0.0
 ```
 
-## 5. 未来拓展
+3. Use a custom configuration file path:
 
-- 支持更多语言（Java、Python等）
-- 提供可视化埋点覆盖率面板
-- 支持与CI/CD系统集成
-- 支持与APM（应用性能监控，Application Performance Monitoring）系统集成，如Prometheus、Grafana、Datadog等，实现埋点数据与应用性能数据的关联分析
-- 提供更多埋点策略选项
+```bash
+export GOAT_CONFIG=/path/to/custom-goat.yaml
+```
 
-## 6. 注意事项
+4. Enable error stack tracing:
 
-- 埋点代码应尽可能轻量，避免影响应用性能
-- 埋点不应修改原有业务逻辑
-- 用户可通过注释手动排除不需要埋点的代码块
-- 生产环境应谨慎使用HTTP服务，建议设置访问控制
+```bash
+export GOAT_STACK_TRACE=1
+```
+
+## 🏷️ Marker Explanation
+
+GOAT uses special code comment markers (markers starting with `// +goat:`) to control code insertion and deletion. There are two types of markers: user-available markers and internal markers.
+
+### User-Available Markers
+
+The following markers can be used by developers:
+
+| Marker | Description | Use Case | Status |
+| --- | --- | --- | --- |
+| `// +goat:delete` | Marks the beginning of a code block that needs to be deleted | Used when a segment of code needs to be deleted | Enabled |
+| `// +goat:insert` | Marks a position where code needs to be inserted | Manually specify instrumentation insertion position | Enabled |
+
+### Internal Markers
+
+The following markers are used internally by GOAT and should not be manually added by users:
+
+| Marker | Description | Use Case | Status |
+| --- | --- | --- | --- |
+| `// +goat:generate` | Marks the beginning of instrumentation code generation | Beginning marker for automatically generated instrumentation code blocks | Enabled |
+| `// +goat:tips: ...` | Tip information | Provides tips to developers about the code block | Enabled |
+| `// +goat:main` | Marks the main function entry point instrumentation | Adds HTTP service startup code in the main function | Enabled |
+| `// +goat:end` | Marks the end of a code block | End marker for all `+goat:` marked blocks | Enabled |
+| `// +goat:import` | Marks the import section | Used to mark import statements related to instrumentation | Not Enabled |
+| `// +goat:user` | Marks user-defined instrumentation | User-defined instrumentation code | Not yet supported |
+
+### Notes
+
+1. **Deleting Code Blocks**: If you change `// +goat:generate` to `// +goat:delete`, and then execute the `goat patch` command, the code between `// +goat:delete` and `// +goat:end` will be deleted.
+
+   ```go
+   // +goat:delete
+   // +goat:tips: do not edit the block between the +goat comments
+   goat.Track(goat.TRACK_ID_1)
+   // +goat:end
+   ```
+
+2. **Inserting Instrumentation**: Add the following at the position where you want to manually insert instrumentation:
+
+   ```go
+   // +goat:insert
+   ```
+
+   After executing `goat patch`, instrumentation code will be inserted at that position.
+
+3. **When Markers Take Effect**: These markers are processed when executing the `goat patch` command, not the `goat track` command.
+
+4. **Marker Nesting**: Markers do not support nesting. Each marker block must be completely ended with `// +goat:end`.
+
+## 📄 License
+
+The source code of `GOAT` is open-sourced under the [MIT License](LICENSE).
+
+## 🖥 Application Scenarios
+
+- Code coverage tracking in gray releases (blue-green deployment, canary release)
+- Execution path monitoring for new features
+- Validation testing for refactored code
+- Impact analysis of performance changes
+- Service upgrade tracking in microservice architectures
+
+## 🔋 Development Environment Requirements
+
+- Go 1.21+
+- Git
+
+## 💎 Contribution
+
+Contributions of code or suggestions are welcome! Please check the [Contribution Guidelines](CONTRIBUTING.md) for more information.
+
+## ☕️ Support
+
+If you find GOAT helpful, you can support the project in the following ways:
+
+- Star the project on GitHub
+- Submit Pull Requests to add new features or fix bugs
+- Recommend this project to others
