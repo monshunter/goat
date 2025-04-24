@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"runtime"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v3"
 )
@@ -194,8 +196,6 @@ const (
 	DataTypeTruth // default
 	// DataTypeCount is the count type
 	DataTypeCount
-	// DataTypeAverage is the average type
-	DataTypeAverage
 )
 
 // String returns the string representation of the data type
@@ -206,7 +206,7 @@ func (d DataType) String() string {
 // IsValid checks if the data type is valid
 func (d DataType) IsValid() bool {
 	switch d {
-	case DataTypeTruth, DataTypeCount, DataTypeAverage:
+	case DataTypeTruth, DataTypeCount:
 		return true
 	default:
 		return false
@@ -215,9 +215,8 @@ func (d DataType) IsValid() bool {
 
 // dataTypeNames is the names of the data types
 var dataTypeNames = []string{
-	DataTypeTruth:   "truth",
-	DataTypeCount:   "count",
-	DataTypeAverage: "average",
+	DataTypeTruth: "truth",
+	DataTypeCount: "count",
 }
 
 // Int returns the integer representation of the data type
@@ -231,8 +230,6 @@ func GetDataType(s string) (DataType, error) {
 		return DataTypeTruth, nil
 	case "count":
 		return DataTypeCount, nil
-	case "average":
-		return DataTypeAverage, nil
 	default:
 		return DataTypeTruth, fmt.Errorf("invalid data type: %s", s)
 	}
@@ -306,6 +303,24 @@ func (c *Config) Validate() error {
 
 	if c.NewBranch == "" {
 		c.NewBranch = "HEAD"
+	}
+
+	// if AppName is empty, use the last part of the project root directory as the default value
+	if c.AppName == "" {
+		dir, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
+		c.AppName = filepath.Base(dir)
+	}
+
+	// if AppVersion is empty, use the short commit hash of the current commit as the default value
+	if c.AppVersion == "" {
+		commitHash, err := getShortCommitHash(c.NewBranch)
+		if err != nil {
+			return fmt.Errorf("failed to get short commit hash: %w", err)
+		}
+		c.AppVersion = commitHash
 	}
 
 	if c.Ignores == nil {
@@ -421,8 +436,25 @@ func (c *Config) GetDataType() DataType {
 	return dt
 }
 
+// IsNewRepository returns true if the old branch is "INIT"
 func (c *Config) IsNewRepository() bool {
 	return c.OldBranch == "INIT"
+}
+
+// getShortCommitHash returns the short commit hash of the given reference
+func getShortCommitHash(ref string) (string, error) {
+	repo, err := git.PlainOpen(".")
+	if err != nil {
+		return "", fmt.Errorf("failed to open git repository: %w", err)
+	}
+
+	// try to resolve the reference
+	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve revision: %w", err)
+	}
+
+	return hash.String()[:7], nil
 }
 
 // LoadConfig loads configuration from file

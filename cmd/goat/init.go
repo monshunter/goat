@@ -21,8 +21,8 @@ func initCmd() *cobra.Command {
 Options:
   --old <oldBranch>                     Old branch for comparison base (default: "main"), valid values: [commit hash, branch name, tag name, "", HEAD, INIT (for new repository)]
   --new <newBranch>                     New branch for comparison target (default: "HEAD"), valid values: [commit hash, branch name, tag name, "", HEAD]
-  --app-name <appName>                  Application name (default: "example-app")
-  --app-version <appVersion>            Application version (default: "1.0.0")
+  --app-name <appName>                  Application name (default: current directory name)
+  --app-version <appVersion>            Application version (default: current commit short hash)
   --granularity <granularity>           Granularity (line, patch, scope, func) (default: "patch")
   --diff-precision <diffPrecision>      Diff precision (1~3) (default: 1)
   --threads <threads>                   Number of threads (default: 1)
@@ -35,7 +35,7 @@ Options:
   --printer-config-mode <mode>          Printer config mode, list of (none, useSpaces, tabIndent, sourcePos, rawFormat) (default: "useSpaces,tabIndent")
   --printer-config-tabwidth <tabwidth>  Printer config tabwidth (default: 8)
   --printer-config-indent <indent>      Printer config indent (default: 0)
-  --data-type <dataType>                Data type (truth, count, average) (default: "truth")
+  --data-type <dataType>                Data type (truth, count) (default: "truth")
   --force                               Force overwrite existing goat.yaml file
 
 Examples:
@@ -154,8 +154,8 @@ Examples:
 	// add command line options
 	cmd.Flags().String("old", "main", "Old branch for comparison base, valid values: [commit hash, branch name, tag name, '', HEAD, INIT (for new repository)]")
 	cmd.Flags().String("new", "HEAD", "New branch for comparison target, valid values: [commit hash, branch name, tag name, '', HEAD]")
-	cmd.Flags().String("app-name", "example-app", "Application name")
-	cmd.Flags().String("app-version", "1.0.0", "Application version")
+	cmd.Flags().String("app-name", "", "Application name")
+	cmd.Flags().String("app-version", "", "Application version")
 	cmd.Flags().String("granularity", "patch", "Granularity (line, patch, scope, func)")
 	cmd.Flags().Int("diff-precision", 1, "Diff precision (1~3)")
 	cmd.Flags().Int("threads", 1, "Number of threads")
@@ -168,7 +168,7 @@ Examples:
 	cmd.Flags().String("printer-config-mode", "useSpaces,tabIndent", "Printer config mode, list of (none, useSpaces, tabIndent, sourcePos, rawFormat)")
 	cmd.Flags().Int("printer-config-tabwidth", 8, "Printer config tabwidth")
 	cmd.Flags().Int("printer-config-indent", 0, "Printer config indent")
-	cmd.Flags().String("data-type", "truth", "Data type (truth, count, average)")
+	cmd.Flags().String("data-type", "truth", "Data type (truth, count)")
 	cmd.Flags().Bool("force", false, "Force overwrite existing goat.yaml file")
 
 	return cmd

@@ -22,6 +22,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"crypto/md5"
+	"bytes"
 )
 
 // application version
@@ -127,8 +129,27 @@ type Item struct {
 // Items slice
 type Items []Item
 
+// localHash is a hash of the items
+var localHash = md5.New()
+
+// Version returns the version of the items
+func (it Items) Version() string {
+	sort.Slice(it, func(i, j int) bool {
+		return it[i].ID < it[j].ID
+	})
+	var buf bytes.Buffer
+	for _, item := range it {
+		buf.WriteString(fmt.Sprintf("#%d=%d", item.ID, item.Count))
+	}
+	localHash.Reset()
+	localHash.Write(buf.Bytes())
+	return fmt.Sprintf("%x", localHash.Sum(nil))
+}
+	
 // Metrics struct
 type Metrics struct {
+	// version
+	Version string ` + "`json:\"version\"`" + `
 	// total track count
 	Total       int    ` + "`json:\"total\"`" + `
 	// covered track count
@@ -236,7 +257,7 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 				covered++
 			}
 		}
-
+		version := items.Version()
 		switch order {
 		case 0:
 			sort.Slice(items, func(i, j int) bool {
@@ -260,9 +281,15 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 			coveredRate = covered * 100 / len(componentTrackIds)
 		}
 		results = append(results, ComponentResult{
-			ID:      component,
-			Name:    GetComponentName(component),
-			Metrics: Metrics{Total: len(componentTrackIds), Covered: covered, CoveredRate: coveredRate, Items: items},
+			ID:   component,
+			Name: GetComponentName(component),
+			Metrics: Metrics{
+				Version: version,
+				Total:   len(componentTrackIds),
+				Covered: covered,
+				CoveredRate: coveredRate,
+				Items:     items,
+			},
 		})
 	}
 	// output JSON

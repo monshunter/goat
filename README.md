@@ -220,6 +220,7 @@ The API returns responses in JSON format, containing the following information:
       "id": 0, // component id
       "name": "ComponentName", // component name
       "metrics": {
+        "version":"d6f985a397eb7ba24b877cc67a14b663",  // version of this metrics
         "total": 10,         // Total number of instrumentation points
         "covered": 5,         // Number of covered instrumentation points
         "coveredRate": 50,    // Coverage rate (percentage)

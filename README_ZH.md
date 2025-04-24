@@ -220,6 +220,7 @@ API返回JSON格式的响应，包含以下信息：
       "id": 0,   // 组件id
       "name": "组件名称", // 组件名字
       "metrics": {
+        "version":"d6f985a397eb7ba24b877cc67a14b663",  // 此指标的版本
         "total": 10,         // 总埋点数
         "covered": 5,         // 已覆盖的埋点数
         "coveredRate": 50,    // 覆盖率（百分比）

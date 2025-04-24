@@ -6,10 +6,12 @@ const CONFIG_TEMPLATE = `# Goat configuration goat.yaml
 # Please do modify when you know what you are doing.
 # Every time the field is changed, please rerun "goat patch" to update the tracking results.
 #
-## App name
+## App name (default: current directory name)
 appName: {{.AppName}}
 
-## App version
+## App version (default: current .newBranch's commit short hash)
+## Before running "goat track" or "goat patch",please confirm the appVersion is the correct version.
+## Change when it's necessary.
 appVersion: {{.AppVersion}}
 
 ## Old branch name (for comparison base)
@@ -93,7 +95,7 @@ printerConfigTabwidth: {{.PrinterConfigTabwidth}}
 ## Printer config indent (default: 0)
 printerConfigIndent: {{.PrinterConfigIndent}}
 
-## Data type ([truth, count, average], default: truth)
+## Data type ([truth, count], default: truth)
 dataType: {{.DataType}}
 
 ## Verbose output (default: false)
