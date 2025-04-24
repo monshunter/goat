@@ -48,11 +48,29 @@ var TrackIdNames [TRACK_ID_END]string
 // track ID status record - use slice instead of map to improve performance
 var trackIdStatus [TRACK_ID_END]uint32
 
+// track metrics
+const (
+	TRACK_COVERAGE_RATIO = "goat_track_coverage_ratio"
+	TRACK_TOTAL          = "goat_track_total"
+	TRACK_COVERED        = "goat_track_covered"
+)
+
+// track metrics description
+const (
+	TRACK_COVERAGE_RATIO_DESC = "Goat track coverage ratio"
+	TRACK_TOTAL_DESC          = "Goat track total"
+	TRACK_COVERED_DESC        = "Goat track covered"
+)
+
+// current component
+var currentComponent string
+
 // initialize track IDs
 func init() {
 	for i := 1; i < TRACK_ID_END; i++ {
 		TrackIdNames[i] = fmt.Sprintf("TRACK_ID_%d", i)
 	}
+	currentComponent = os.Getenv("GOAT_CURRENT_COMPONENT")
 }
 
 // Track track function
@@ -183,6 +201,7 @@ func ServeHTTP(component Component) {
 	go func() {
 		system := http.NewServeMux()
 		system.HandleFunc("/metrics", metricsHandler)
+		system.HandleFunc("/track", trackHandler)
   		// DEAD in hexadecimal is 57005 in decimal
 		port := "57005"
 		if os.Getenv("GOAT_PORT") != "" {
@@ -195,19 +214,20 @@ func ServeHTTP(component Component) {
 		addr := fmt.Sprintf("%s:%s", expose, port)
 		log.Printf("Goat track service started: http://%s\n", addr)
 		// Tips how to use
-		log.Printf("Goat track all components: http://%s/metrics\n", addr)
-		log.Printf("Goat track component: http://%s/metrics?component=COMPONENT_ID\n", addr)
-		log.Printf("Goat track components: http://%s/metrics?component=COMPONENT_ID,COMPONENT_ID2\n", addr)
-		log.Printf("Goat track order by count asc: http://%s/metrics?component=COMPONENT_ID&order=0\n", addr)
-		log.Printf("Goat track order by count desc: http://%s/metrics?component=COMPONENT_ID&order=1\n", addr)
-		log.Printf("Goat track order by id asc: http://%s/metrics?component=COMPONENT_ID&order=2\n", addr)
-		log.Printf("Goat track order by id desc: http://%s/metrics?component=COMPONENT_ID&order=3\n", addr)
+		log.Printf("Goat track all components metrics in prometheus format: http://%s/metrics\n", addr)
+		log.Printf("Goat track all components details: http://%s/track\n", addr)
+		log.Printf("Goat track component details: http://%s/track?component=COMPONENT_ID\n", addr)
+		log.Printf("Goat track components details: http://%s/track?component=COMPONENT_ID,COMPONENT_ID2\n", addr)
+		log.Printf("Goat track details order by count asc: http://%s/track?component=COMPONENT_ID&order=0\n", addr)
+		log.Printf("Goat track details order by count desc: http://%s/track?component=COMPONENT_ID&order=1\n", addr)
+		log.Printf("Goat track details order by id asc: http://%s/track?component=COMPONENT_ID&order=2\n", addr)
+		log.Printf("Goat track details order by id desc: http://%s/track?component=COMPONENT_ID&order=3\n", addr)
 		log.Fatal(http.ListenAndServe(addr, system))
 	}()
 }
 
-// metricsHandler track ID status processing function
-func metricsHandler(w http.ResponseWriter, r *http.Request) {
+// trackHandler track ID status processing function
+func trackHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	// invalid order:
@@ -296,6 +316,71 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	jsonData, _ := json.Marshal(Results{Name: NAME, Version: VERSION, Results: results})
 	w.Write(jsonData)
 }
+
+// metricsHandler metrics handler
+func metricsHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+
+	indicators := [][]string{
+		{TRACK_TOTAL, TRACK_TOTAL_DESC},
+		{TRACK_COVERED, TRACK_COVERED_DESC},
+		{TRACK_COVERAGE_RATIO, TRACK_COVERAGE_RATIO_DESC},
+	}
+
+	targetComponents := components
+	if currentComponent != "" {
+		componentIdx, ok := componentNamesMap[currentComponent]
+		if !ok {
+			http.Error(w, "invalid component", http.StatusBadRequest)
+			return
+		}
+		targetComponents = []Component{componentIdx}
+	}
+
+	coverages := make([]int, len(targetComponents))
+	counts := make([]int, len(targetComponents))
+
+	for _, component := range targetComponents {
+		covered := 0
+		componentTrackIds := COMPONENT_TRACK_IDS[component]
+		for _, id := range componentTrackIds {
+			count := trackIdStatus[id]
+			if count > 0 {
+				covered++
+			}
+		}
+		coverages[component] = covered
+		counts[component] = len(componentTrackIds)
+	}
+
+	for _, indicator := range indicators {
+		w.Write([]byte(formatHelp(indicator[0], indicator[1])))
+		for i := 0; i < len(targetComponents); i++ {
+			component := targetComponents[i]
+			switch indicator[0] {
+			case TRACK_COVERAGE_RATIO:
+				ratio := coverages[component] * 100 / counts[component]
+				w.Write([]byte(formatMetric(indicator[0], NAME, VERSION, componentNames[component], ratio)))
+			case TRACK_TOTAL:
+				w.Write([]byte(formatMetric(indicator[0], NAME, VERSION, componentNames[component], counts[component])))
+			case TRACK_COVERED:
+				w.Write([]byte(formatMetric(indicator[0], NAME, VERSION, componentNames[component], coverages[component])))
+			}
+		}
+	}
+}
+
+// formatHelp format help and type
+func formatHelp(name string, help string) string {
+	return fmt.Sprintf("# HELP %s %s\n# TYPE %s gauge\n", name, help, name)
+}
+
+// formatMetric format metric
+func formatMetric(name, app string, version string, component string, value int) string {
+	return fmt.Sprintf("%s{app=\"%s\",version=\"%s\",component=\"%s\"} %d\n", name, app, version, component, value)
+}
+
 `
 
 const TrackImportPathPlaceHolder = `github.com/monshunter/goat/goat`

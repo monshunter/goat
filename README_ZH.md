@@ -170,46 +170,65 @@ export GOAT_PORT=8080
 ### API端点
 
 GOAT提供了以下API端点用于查询埋点覆盖状态：
-
-#### 1. 获取所有组件的埋点状态
-
-```
-GET http://localhost:57005/metrics
-```
-
-#### 2. 获取特定组件的埋点状态
+#### 1. 获取Prometheus格式的metrics
 
 ```
-GET http://localhost:57005/metrics?component=COMPONENT_ID
+GET http://127.0.0.1:57005/metrics
+```
+
+#### 2. 获取所有组件的埋点状态
+
+```
+GET http://localhost:57005/track
+```
+
+#### 3. 获取特定组件的埋点状态
+
+```
+GET http://localhost:57005/track?component=COMPONENT_ID
 ```
 
 其中`COMPONENT_ID`是组件的ID（通常从0开始的整数）或组件名称。
 
-#### 3. 获取多个组件的埋点状态
+#### 4. 获取多个组件的埋点状态
 
 ```
-GET http://localhost:57005/metrics?component=COMPONENT_ID1,COMPONENT_ID2
+GET http://localhost:57005/track?component=COMPONENT_ID1,COMPONENT_ID2
 ```
 
-#### 4. 按照不同顺序排序结果
+#### 5. 按照不同顺序排序结果
 
 ```
 # 按照执行次数升序排序
-GET http://localhost:57005/metrics?component=COMPONENT_ID&order=0
+GET http://localhost:57005/track?component=COMPONENT_ID&order=0
 
 # 按照执行次数降序排序
-GET http://localhost:57005/metrics?component=COMPONENT_ID&order=1
+GET http://localhost:57005/track?component=COMPONENT_ID&order=1
 
 # 按照ID升序排序
-GET http://localhost:57005/metrics?component=COMPONENT_ID&order=2
+GET http://localhost:57005/track?component=COMPONENT_ID&order=2
 
 # 按照ID降序排序
-GET http://localhost:57005/metrics?component=COMPONENT_ID&order=3
+GET http://localhost:57005/track?component=COMPONENT_ID&order=3
 ```
 
 ### 响应格式
 
-API返回JSON格式的响应，包含以下信息：
+/metrics API 返回 Prometheus 的标准格式：
+
+```
+# HELP goat_track_total goat track total
+# TYPE goat_track_total gauge
+goat_track_total{app="calculator",version="cadafce",component="."} 16
+# HELP goat_track_covered goat track covered
+# TYPE goat_track_covered gauge
+goat_track_covered{app="calculator",version="cadafce",component="."} 5
+# HELP goat_track_coverage_ratio goat track coverage ratio
+# TYPE goat_track_coverage_ratio gauge
+goat_track_coverage_ratio{app="calculator",version="cadafce",component="."} 31
+```
+
+/track API返回JSON格式的响应，包含以下信息：
 
 ```json
 {
@@ -244,13 +263,13 @@ API返回JSON格式的响应，包含以下信息：
 1. 使用curl查看所有埋点状态：
 
 ```bash
-curl http://localhost:57005/metrics | jq
+curl http://localhost:57005/track | jq
 ```
 
 2. 使用curl查看特定组件的埋点状态：
 
 ```bash
-curl http://localhost:57005/metrics?component=0 | jq
+curl http://localhost:57005/track?component=0 | jq
 ```
 
 ### 观测和分析
@@ -269,6 +288,7 @@ GOAT项目支持通过环境变量进行配置，下表列出了所有可用的�
 | `GOAT_PORT` | 设置埋点HTTP服务的端口 | `57005` | 当默认端口被占用或需要自定义端口时 |
 | `GOAT_METRICS_IP` | 设置埋点HTTP服务绑定的IP地址 | `127.0.0.1` | 当需要从非本机访问埋点服务时，可设置为`0.0.0.0` |
 | `GOAT_CONFIG` | 指定配置文件的路径 | `goat.yaml` | 当需要使用非默认位置的配置文件时 |
+| `GOAT_CURRENT_COMPONENT` | 指定当前组件名称 | `""` | 如未指定 /metrics 将返回所有组件的metrics  |
 | `GOAT_STACK_TRACE` | 是否在发生致命错误时显示堆栈跟踪 | `false` | 调试问题时设置为`1`或`true`或`yes` |
 
 ### 环境变量使用示例
@@ -295,6 +315,12 @@ export GOAT_CONFIG=/path/to/custom-goat.yaml
 
 ```bash
 export GOAT_STACK_TRACE=1
+```
+
+5. 指定/metrics 数据的组件名称：
+
+```bash
+export GOAT_CURRENT_COMPONENT="cmd/echo"
 ```
 
 ## 🏷️ 标记说明

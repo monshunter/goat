@@ -171,45 +171,65 @@ export GOAT_PORT=8080
 
 GOAT provides the following API endpoints for querying instrumentation coverage status:
 
-#### 1. Get Instrumentation Status for All Components
+#### 1. Get metrics in Prometheus format
 
 ```
-GET http://localhost:57005/metrics
+GET http://127.0.0.1:57005/metrics
 ```
 
-#### 2. Get Instrumentation Status for a Specific Component
+#### 2. Get Instrumentation Status for All Components
 
 ```
-GET http://localhost:57005/metrics?component=COMPONENT_ID
+GET http://localhost:57005/track
+```
+
+#### 3. Get Instrumentation Status for a Specific Component
+
+```
+GET http://localhost:57005/track?component=COMPONENT_ID
 ```
 
 Where `COMPONENT_ID` is the component's ID (usually an integer starting from 0) or the component name.
 
-#### 3. Get Instrumentation Status for Multiple Components
+#### 4. Get Instrumentation Status for Multiple Components
 
 ```
-GET http://localhost:57005/metrics?component=COMPONENT_ID1,COMPONENT_ID2
+GET http://localhost:57005/track?component=COMPONENT_ID1,COMPONENT_ID2
 ```
 
-#### 4. Sort Results in Different Orders
+#### 5. Sort Results in Different Orders
 
 ```
 # Sort by execution count in ascending order
-GET http://localhost:57005/metrics?component=COMPONENT_ID&order=0
+GET http://localhost:57005/track?component=COMPONENT_ID&order=0
 
 # Sort by execution count in descending order
-GET http://localhost:57005/metrics?component=COMPONENT_ID&order=1
+GET http://localhost:57005/track?component=COMPONENT_ID&order=1
 
 # Sort by ID in ascending order
-GET http://localhost:57005/metrics?component=COMPONENT_ID&order=2
+GET http://localhost:57005/track?component=COMPONENT_ID&order=2
 
 # Sort by ID in descending order
-GET http://localhost:57005/metrics?component=COMPONENT_ID&order=3
+GET http://localhost:57005/track?component=COMPONENT_ID&order=3
 ```
 
 ### Response Format
 
-The API returns responses in JSON format, containing the following information:
+The /metrics API returns the standard format of Prometheus:
+
+```
+# HELP goat_track_total goat track total
+# TYPE goat_track_total gauge
+goat_track_total{app="calculator",version="cadafce",component="."} 16
+# HELP goat_track_covered goat track covered
+# TYPE goat_track_covered gauge
+goat_track_covered{app="calculator",version="cadafce",component="."} 5
+# HELP goat_track_coverage_ratio goat track coverage ratio
+# TYPE goat_track_coverage_ratio gauge
+goat_track_coverage_ratio{app="calculator",version="cadafce",component="."} 31
+```
+
+The /track API returns responses in JSON format, containing the following information:
 
 ```json
 {
@@ -244,13 +264,13 @@ The API returns responses in JSON format, containing the following information:
 1. View all instrumentation status using curl:
 
 ```bash
-curl http://localhost:57005/metrics | jq
+curl http://localhost:57005/track | jq
 ```
 
 2. View instrumentation status for a specific component using curl:
 
 ```bash
-curl http://localhost:57005/metrics?component=0 | jq
+curl http://localhost:57005/track?component=0 | jq
 ```
 
 ### Observation and Analysis
@@ -269,6 +289,7 @@ The GOAT project supports configuration through environment variables. The follo
 | `GOAT_PORT` | Sets the port for the instrumentation HTTP service | `57005` | When the default port is occupied or a custom port is needed |
 | `GOAT_METRICS_IP` | Sets the IP address that the instrumentation HTTP service binds to | `127.0.0.1` | When access from non-local machines is needed, can be set to `0.0.0.0` |
 | `GOAT_CONFIG` | Specifies the path to the configuration file | `goat.yaml` | When a non-default location for the configuration file is needed |
+| `GOAT_CURRENT_COMPONENT` | Specifies the name of the current component | `""` | If not specified, `/metrics` will return the metrics of all components |
 | `GOAT_STACK_TRACE` | Whether to display stack traces when fatal errors occur | `false` | Set to `1` or `true` or `yes` when debugging issues |
 
 ### Examples of Using Environment Variables
@@ -295,6 +316,12 @@ export GOAT_CONFIG=/path/to/custom-goat.yaml
 
 ```bash
 export GOAT_STACK_TRACE=1
+```
+
+5. Component name for the /metrics data:
+
+```bash
+export GOAT_CURRENT_COMPONENT="cmd/echo"
 ```
 
 ## 🏷️ Marker Explanation
