@@ -70,6 +70,16 @@ func newRepoInfo(oldBranch, newBranch string) (*repoInfo, error) {
 		return nil, fmt.Errorf("failed to resolve new branch: %w", err)
 	}
 
+	// check if newBranch is the same as the current HEAD
+	headRef, err := repo.Head()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get HEAD reference: %w", err)
+	}
+
+	if newHash != headRef.Hash() {
+		return nil, fmt.Errorf("new branch(%s) is not the same as the current HEAD, please switch to the correct commit point before running the operation", newBranch)
+	}
+
 	oldCommit, err := repo.CommitObject(oldHash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get old branch commit: %w", err)
@@ -79,6 +89,13 @@ func newRepoInfo(oldBranch, newBranch string) (*repoInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get new branch commit: %w", err)
 	}
+
+	if isAncestor, err := oldCommit.IsAncestor(newCommit); err != nil {
+		return nil, fmt.Errorf("failed to check if old commit is an ancestor of new commit: %w", err)
+	} else if !isAncestor {
+		return nil, fmt.Errorf("old commit is not an ancestor of new commit")
+	}
+
 	return &repoInfo{
 		repo:      repo,
 		oldHash:   oldHash,

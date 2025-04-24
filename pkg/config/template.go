@@ -31,6 +31,7 @@ oldBranch: {{.OldBranch}}
 ## 3. tag name
 ## 4. "" or "HEAD" means the current branch
 ## default: "HEAD"
+## newBranch must be the same as the current HEAD
 newBranch: {{.NewBranch}}
 
 ## Ignore files and directories

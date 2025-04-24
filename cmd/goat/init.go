@@ -153,7 +153,7 @@ Examples:
 
 	// add command line options
 	cmd.Flags().String("old", "main", "Old branch for comparison base, valid values: [commit hash, branch name, tag name, '', HEAD, INIT (for new repository)]")
-	cmd.Flags().String("new", "HEAD", "New branch for comparison target, valid values: [commit hash, branch name, tag name, '', HEAD]")
+	cmd.Flags().String("new", "HEAD", "New branch for comparison target, valid values: [commit hash, branch name, tag name, '', HEAD], newBranch must be the same as the current HEAD")
 	cmd.Flags().String("app-name", "", "Application name")
 	cmd.Flags().String("app-version", "", "Application version")
 	cmd.Flags().String("granularity", "patch", "Granularity (line, patch, scope, func)")
