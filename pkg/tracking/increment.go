@@ -405,7 +405,7 @@ func (t *IncrementalTrack) addStmts() ([]byte, error) {
 				t.insertSingleLineStmt(pos)
 			}
 			t.processStatements(decl.Body.List, fset)
-			t.processSpecialStatements(decl.Body, fset)
+			t.processControlStatements(decl.Body, fset)
 		case *ast.GenDecl:
 			t.processGlobalValueSpecs(decl.Specs, fset)
 			t.processGlobalFunctionLit(decl.Specs, fset)
@@ -455,7 +455,7 @@ func (t *IncrementalTrack) processGlobalFunctionLit(specs []ast.Spec, fset *toke
 					switch n := n.(type) {
 					case *ast.FuncLit:
 						if n.Body != nil {
-							t.processSpecialStatements(n.Body, fset)
+							t.processControlStatements(n.Body, fset)
 						}
 						return false
 					}
@@ -466,7 +466,7 @@ func (t *IncrementalTrack) processGlobalFunctionLit(specs []ast.Spec, fset *toke
 	}
 }
 
-func (t *IncrementalTrack) processSpecialStatements(node ast.Node, fset *token.FileSet) {
+func (t *IncrementalTrack) processControlStatements(node ast.Node, fset *token.FileSet) {
 	ast.Inspect(node, func(n ast.Node) bool {
 		if n == nil {
 			return false
@@ -671,6 +671,7 @@ func (t *IncrementalTrack) processStatements(statList []ast.Stmt, fset *token.Fi
 			t.checkAndMarkInsert(fset.Position(s.Pos()).Line)
 			t.analyzeAndModifyExpr(s.Results, fset)
 		case *ast.DeferStmt:
+			t.checkAndMarkInsert(fset.Position(s.Pos()).Line)
 			if s.Call != nil && s.Call.Fun != nil {
 				t.analyzeAndModifyExpr([]ast.Expr{s.Call.Fun}, fset)
 			}
