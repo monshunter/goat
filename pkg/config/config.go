@@ -49,7 +49,7 @@ const (
 
 var (
 	// Track insert regexp, which is used to match the insert comment
-	TrackInsertRegexp = regexp.MustCompile(regexp.QuoteMeta(TrackInsertComment))
+	TrackInsertRegexp = regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(TrackInsertComment) + `[^\n]*\n`)
 	// Track generate end regexp, which is used to match the generate end comment
 	TrackGenerateEndRegexp = regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(TrackGenerateComment) +
 		`[^\n]` + `*\n(?:.*\n)*?\s*` + regexp.QuoteMeta(TrackEndComment) + `[^\n]*\n`)

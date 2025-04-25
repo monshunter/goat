@@ -38,7 +38,7 @@ Examples:
 				return err
 			}
 
-			// 显示成功提示和后续建议
+			// Success message and suggestions
 			log.Info("----------------------------------------------------------")
 			log.Info("✅ Clean completed successfully!")
 			log.Info("All instrumentation code has been removed from your project.")

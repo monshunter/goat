@@ -140,7 +140,7 @@ GOAT provides several detailed usage examples to help you better understand its 
 3. [Clean Command Example](examples/clean_example.md) - How to clean up tracing code
 4. [Granularity Examples](examples/granularity_example.md) - Demonstrates tracing at different granularities
 
-For more examples, check the [examples directory](examples/).
+For more examples, check the [examples directory](examples/README.md).
 
 ## 🖥 Application Scenarios
 
@@ -233,7 +233,7 @@ The /track API returns responses in JSON format, containing the following inform
 
 ```json
 {
-  "name": "example-app", 
+  "name": "example-app",
   "version": "1.0.0",
   "results": [
     {

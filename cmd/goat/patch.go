@@ -41,7 +41,7 @@ Examples:
 				return err
 			}
 
-			// 显示成功提示和后续建议
+			// Success message and suggestions
 			log.Info("----------------------------------------------------------")
 			log.Info("✅ Patch applied successfully!")
 			log.Info("Manual markers have been processed (// +goat:delete, // +goat:insert)")

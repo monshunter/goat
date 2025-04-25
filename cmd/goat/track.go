@@ -47,7 +47,7 @@ Examples:
 				return err
 			}
 
-			// 显示成功提示和后续建议
+			// Show success message and next steps
 			log.Info("----------------------------------------------------------")
 			log.Info("✅ Track completed successfully!")
 			log.Info("You can:")

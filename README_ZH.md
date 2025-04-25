@@ -140,7 +140,7 @@ GOAT 提供了多个详细的使用示例，帮助您更好地理解其功能：
 3. [Clean 命令示例](examples/zh-cn/clean_example.md) - 如何清理跟踪代码
 4. [粒度示例](examples/zh-cn/granularity_example.md) - 演示不同粒度下的代码跟踪
 
-更多示例请查看[示例目录](examples/zh-cn/)。
+更多示例请查看[示例目录](examples/zh-cn/README.md)。
 
 ## 🖥 应用场景
 
@@ -232,7 +232,7 @@ goat_track_coverage_ratio{app="calculator",version="cadafce",component="."} 31
 
 ```json
 {
-  "name": "example-app", 
+  "name": "example-app",
   "version": "1.0.0",
   "results": [
     {

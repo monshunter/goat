@@ -10,5 +10,5 @@
 2. [使用 goat patch 的示例](./patch_example.md) - 演示如何使用 goat patch 命令处理手动追踪标记
 3. [使用 goat clean 的示例](./clean_example.md) - 演示如何使用 goat clean 命令清理追踪过的代码
 4. [在不同粒度下追踪的示例](./granularity_example.md) - 展示在不同粒度（行、补丁、作用域、函数）下代码追踪的差异
-
-每个示例都包括原始代码、修改后的代码、执行步骤的说明，以及结果的展示。 
+5. [通过一个echo服务体验goat的工作流程](./echo_command_demo.md) - 演示如何使用 goat track、goat patch 和 goat clean 命令来追踪、处理和清理代码变更
+每个示例都包括原始代码、修改后的代码、执行步骤的说明，以及结果的展示。
