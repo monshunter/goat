@@ -52,7 +52,7 @@ Examples:
 			if _, err := os.Stat(project); os.IsNotExist(err) {
 				return fmt.Errorf("current directory not found")
 			}
-			log.Info("initializing project")
+			log.Info("Initializing project")
 			project, err := filepath.Abs(project)
 			if err != nil {
 				return fmt.Errorf("failed to get absolute path: %w", err)
@@ -138,15 +138,15 @@ Examples:
 			}
 
 			// initialize config
-			log.Infof("initializing config: %s", filename)
+			log.Infof("Initializing config: %s", filename)
 			err = config.InitWithConfig(filename, cfg)
 			if err != nil {
 				log.Fatalf("failed to initialize project: %v", err)
 				return err
 			}
 
-			log.Info("project initialized successfully")
-			log.Infof("you can edit '%s' to customize configurations according to your needs", filename)
+			log.Info("Project initialized successfully")
+			log.Infof("You can edit '%s' to customize configurations according to your needs", filename)
 			return nil
 		},
 	}

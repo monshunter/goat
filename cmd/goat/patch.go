@@ -48,7 +48,7 @@ Examples:
 			log.Info("You can:")
 			log.Info("- Review the changes using git diff or your preferred diff tool")
 			log.Info("- Build and test your application to verify the changes")
-			log.Info("- Add more manual markers and run 'goat fix' again if needed")
+			log.Info("- Add more manual markers and run 'goat patch' again if needed")
 			log.Info("- If you want to remove all instrumentation, run 'goat clean'")
 			log.Info("----------------------------------------------------------")
 
