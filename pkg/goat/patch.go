@@ -44,11 +44,11 @@ func NewPatchExecutor(cfg *config.Config) *PatchExecutor {
 func (f *PatchExecutor) Run() error {
 	log.Infof("Patching project")
 	if err := f.initMainPackageInfos(); err != nil {
-		log.Errorf("failed to init main package infos: %v", err)
+		log.Errorf("Failed to init main package infos: %v", err)
 		return err
 	}
 	if err := f.prepare(); err != nil {
-		log.Errorf("failed to prepare: %v", err)
+		log.Errorf("Failed to prepare: %v", err)
 		return err
 	}
 

@@ -134,7 +134,7 @@ func TestFatalStackTrace(t *testing.T) {
 	EnableStackTrace(true)
 
 	// Call Fatal with a test message
-	Fatal("test fatal error")
+	Fatal("Test fatal error")
 
 	// Restore stdout and stderr
 	w.Close()
@@ -167,7 +167,7 @@ func TestFatalStackTrace(t *testing.T) {
 	}
 
 	// Verify stdout contains log message
-	if !strings.Contains(stdoutOutput, "test fatal error") {
+	if !strings.Contains(stdoutOutput, "Test fatal error") {
 		t.Error("Fatal log message not found in stdout output")
 	}
 }

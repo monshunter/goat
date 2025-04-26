@@ -29,7 +29,7 @@ Examples:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.LoadConfig(config.ConfigYaml)
 			if err != nil {
-				log.Errorf("failed to load config: %v", err)
+				log.Errorf("Failed to load config: %v", err)
 				return err
 			}
 			cleanExecutor := goat.NewCleanExecutor(cfg)

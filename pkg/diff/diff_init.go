@@ -37,7 +37,7 @@ func (d *DifferInit) AnalyzeChanges() ([]*FileChange, error) {
 	fileChanges := make([]*FileChange, 0)
 	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			log.Errorf("failed to walk: %v", err)
+			log.Errorf("Failed to walk: %v", err)
 			return err
 		}
 		if info.IsDir() {
@@ -57,7 +57,7 @@ func (d *DifferInit) AnalyzeChanges() ([]*FileChange, error) {
 		var content []byte
 		content, err = os.ReadFile(path)
 		if err != nil {
-			log.Errorf("failed to read file: %v", err)
+			log.Errorf("Failed to read file: %v", err)
 			return err
 		}
 		// count lines

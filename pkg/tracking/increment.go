@@ -126,7 +126,6 @@ func (t *IncrementalTrack) doInsert() ([]byte, error) {
 	for i := range deltaArray {
 		deltaArray[i] = -1
 	}
-	deltaArrayLength := len(deltaArray)
 	deltaIdx := -1
 	deltaLine := -1
 	if len(t.singleLineInsertedPositions) > 0 {
@@ -137,15 +136,14 @@ func (t *IncrementalTrack) doInsert() ([]byte, error) {
 	buf.Grow(t.sourceLength + adjustLength)
 	for ; i < len(sources) && posIdx < len(t.insertedPositions); i++ {
 		if i == t.insertedPositions[posIdx].line-1 {
-			pos := t.insertedPositions[posIdx]
-			lines := doInsert(&buf, pos, t.trackStmtPlaceHolders)
+			lines := doInsert(&buf, t.trackStmtPlaceHolders)
 			delta += lines
 			posIdx++
 		}
 		if i == deltaLine {
 			deltaArray[deltaIdx] = delta
 			deltaIdx++
-			if deltaIdx < deltaArrayLength {
+			if deltaIdx < len(deltaArray) {
 				deltaLine = t.singleLineInsertedPositions[deltaIdx].line - 1
 			} else {
 				deltaLine = -1
@@ -159,9 +157,9 @@ func (t *IncrementalTrack) doInsert() ([]byte, error) {
 	var content []byte
 	content = buf.Bytes()
 	// handle inserted statements for single line function
-	if deltaArrayLength > 0 {
+	if len(deltaArray) > 0 {
 		// adjust the line number of the single line inserted statements
-		if deltaIdx < deltaArrayLength && deltaArray[deltaIdx] == -1 {
+		if deltaIdx < len(deltaArray) && deltaArray[deltaIdx] == -1 {
 			deltaArray[deltaIdx] = delta
 		}
 		for k := 1; k < len(deltaArray); k++ {
@@ -172,7 +170,7 @@ func (t *IncrementalTrack) doInsert() ([]byte, error) {
 			}
 		}
 
-		for k := range deltaArrayLength {
+		for k := range deltaArray {
 			t.singleLineInsertedPositions[k].line += deltaArray[k]
 		}
 
@@ -191,7 +189,7 @@ func (t *IncrementalTrack) doInsert() ([]byte, error) {
 				newBuf.WriteString(src[:column])
 				newBuf.WriteByte('\n')
 				// write track stmt place holders
-				_ = doInsert(&newBuf, t.singleLineInsertedPositions[k], t.trackStmtPlaceHolders)
+				_ = doInsert(&newBuf, t.trackStmtPlaceHolders)
 				// write column after
 				newBuf.WriteString(src[column:])
 				newBuf.WriteByte('\n')
@@ -358,7 +356,7 @@ func (t *IncrementalTrack) Track() (int, error) {
 		clear(t.visitedInsertedPositions)
 		content, err := utils.AddImport(t.printerConfig, t.importPathPlaceHolder, "", t.fileName, t.content)
 		if err != nil {
-			log.Errorf("failed to add import: %v", err)
+			log.Errorf("Failed to add import: %v", err)
 			return 0, err
 		}
 		t.content = content
@@ -384,7 +382,6 @@ func (t *IncrementalTrack) SetContent(content []byte) {
 
 // addStmts adds tracking statements to the target file
 func (t *IncrementalTrack) addStmts() ([]byte, error) {
-	log.Debugf("Adding tracking to file: %s", t.fileName)
 	fset, f, err := utils.GetAstTree("", t.content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse file %s: %w", t.fileName, err)
@@ -779,7 +776,7 @@ func calculateInsertLength(insertedPositions InsertPositions, defaultInserts []s
 	return count * len(insertedPositions)
 }
 
-func doInsert(buf *bytes.Buffer, pos InsertPosition, trackStmtPlaceHolders []string) int {
+func doInsert(buf *bytes.Buffer, trackStmtPlaceHolders []string) int {
 	// write default track stmt place holders
 	for _, trackStmtPlaceHolder := range trackStmtPlaceHolders {
 		buf.WriteString(trackStmtPlaceHolder)

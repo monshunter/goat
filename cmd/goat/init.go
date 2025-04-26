@@ -141,7 +141,7 @@ Examples:
 			log.Infof("Initializing config: %s", filename)
 			err = config.InitWithConfig(filename, cfg)
 			if err != nil {
-				log.Fatalf("failed to initialize project: %v", err)
+				log.Fatalf("Failed to initialize project: %v", err)
 				return err
 			}
 

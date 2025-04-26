@@ -33,11 +33,11 @@ func NewCleanExecutor(cfg *config.Config) *CleanExecutor {
 func (e *CleanExecutor) Run() error {
 	log.Infof("Cleaning project")
 	if err := e.prepare(); err != nil {
-		log.Errorf("failed to prepare: %v", err)
+		log.Errorf("Failed to prepare: %v", err)
 		return err
 	}
 	if err := e.clean(); err != nil {
-		log.Errorf("failed to clean: %v", err)
+		log.Errorf("Failed to clean: %v", err)
 		return err
 	}
 	log.Infof("Cleaned project")
@@ -50,11 +50,11 @@ func (e *CleanExecutor) prepare() error {
 	var err error
 	files, err := prepareFiles(e.cfg)
 	if err != nil {
-		log.Errorf("failed to prepare files: %v", err)
+		log.Errorf("Failed to prepare files: %v", err)
 		return err
 	}
 	if err := e.prepareContents(files); err != nil {
-		log.Errorf("failed to prepare contents: %v", err)
+		log.Errorf("Failed to prepare contents: %v", err)
 		return err
 	}
 	log.Infof("Prepared %d files", len(e.files))
@@ -74,7 +74,7 @@ func (e *CleanExecutor) prepareContentsSequential(files []string) error {
 	for _, file := range files {
 		content, changed, err := e.prepareContent(file)
 		if err != nil {
-			log.Errorf("failed to prepare content: %v", err)
+			log.Errorf("Failed to prepare content: %v", err)
 			return err
 		}
 		if changed {
@@ -131,7 +131,7 @@ func (e *CleanExecutor) prepareContentsParallel(files []string) error {
 
 			content, changed, err := e.prepareContent(file)
 			if err != nil {
-				log.Errorf("failed to prepare content: %v", err)
+				log.Errorf("Failed to prepare content: %v", err)
 				errChan <- err
 				return
 			}
@@ -170,74 +170,74 @@ func (e *CleanExecutor) prepareContentsParallel(files []string) error {
 }
 
 func (e *CleanExecutor) prepareContent(filename string) (string, bool, error) {
-	log.Debugf("preparing content for file: %s", filename)
+	log.Debugf("Preparing content for file: %s", filename)
 	contentBytes, err := os.ReadFile(filename)
 	if err != nil {
-		log.Errorf("failed to read file: %v", err)
+		log.Errorf("Failed to read file: %v", err)
 		return "", false, err
 	}
 	content := string(contentBytes)
 	changed := false
 	// handle +goat:delete
-	log.Debugf("replacing +goat:delete for file: %s", filename)
+	log.Debugf("Replacing +goat:delete for file: %s", filename)
 	count, newContent, err := utils.ReplaceWithRegexp(config.TrackDeleteEndRegexp,
 		content, func(older string) (newer string) {
 			return ""
 		})
 	if err != nil {
-		log.Errorf("failed to replace +goat:delete: %v", err)
+		log.Errorf("Failed to replace +goat:delete: %v", err)
 		return "", false, err
 	}
 	changed = changed || count > 0
 	// handle +goat:insert
-	log.Debugf("replacing +goat:insert for file: %s", filename)
+	log.Debugf("Replacing +goat:insert for file: %s", filename)
 	count, newContent, err = utils.ReplaceWithRegexp(config.TrackInsertRegexp,
 		newContent, func(older string) (newer string) {
 			return ""
 		})
 	if err != nil {
-		log.Errorf("failed to replace +goat:insert: %v", err)
+		log.Errorf("Failed to replace +goat:insert: %v", err)
 		return "", false, err
 	}
 	changed = changed || count > 0
 	// handle +goat:generate
-	log.Debugf("replacing +goat:generate for file: %s", filename)
+	log.Debugf("Replacing +goat:generate for file: %s", filename)
 	count, newContent, err = utils.ReplaceWithRegexp(config.TrackGenerateEndRegexp,
 		newContent, func(older string) (newer string) {
 			return ""
 		})
 	if err != nil {
-		log.Errorf("failed to replace +goat:generate: %v", err)
+		log.Errorf("Failed to replace +goat:generate: %v", err)
 		return "", false, err
 	}
 	changed = changed || count > 0
 	// handle +goat:main
-	log.Debugf("replacing +goat:main for file: %s", filename)
+	log.Debugf("Replacing +goat:main for file: %s", filename)
 	count, newContent, err = utils.ReplaceWithRegexp(config.TrackMainEntryEndRegexp, newContent, func(older string) (newer string) {
 		return ""
 	})
 	if err != nil {
-		log.Errorf("failed to replace +goat:main: %v", err)
+		log.Errorf("Failed to replace +goat:main: %v", err)
 		return "", false, err
 	}
 	changed = changed || count > 0
 	// handle +goat:user
-	log.Debugf("replacing +goat:user for file: %s", filename)
+	log.Debugf("Replacing +goat:user for file: %s", filename)
 	count, newContent, err = utils.ReplaceWithRegexp(config.TrackUserEndRegexp, newContent, func(older string) (newer string) {
 		return ""
 	})
 	if err != nil {
-		log.Errorf("failed to replace +goat:user: %v", err)
+		log.Errorf("Failed to replace +goat:user: %v", err)
 		return "", false, err
 	}
 	changed = changed || count > 0
 
 	if changed {
 		// remove import
-		log.Debugf("deleting import for file: %s", filename)
+		log.Debugf("Deleting import for file: %s", filename)
 		bytes, err := utils.DeleteImport(e.cfg.PrinterConfig(), e.goatImportPath, e.goatPackageAlias, "", []byte(newContent))
 		if err != nil {
-			log.Errorf("failed to delete import: %v", err)
+			log.Errorf("Failed to delete import: %v", err)
 			return "", false, err
 		}
 		return string(bytes), true, nil
@@ -256,7 +256,7 @@ func (e *CleanExecutor) clean() error {
 		err = e.cleanContentsParallel()
 	}
 	if err != nil {
-		log.Errorf("failed to clean contents: %v", err)
+		log.Errorf("Failed to clean contents: %v", err)
 		return err
 	}
 
@@ -268,10 +268,10 @@ func (e *CleanExecutor) clean() error {
 	empty, err := utils.IsDirEmpty(e.cfg.GoatPackagePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Debugf("goat package does not exist: %s", e.cfg.GoatPackagePath)
+			log.Debugf("Goat package does not exist: %s", e.cfg.GoatPackagePath)
 			return nil
 		}
-		log.Errorf("failed to check if goat package is empty: %v", err)
+		log.Errorf("Failed to check if goat package is empty: %v", err)
 		return err
 	}
 	if empty {

@@ -66,6 +66,6 @@ func main() {
 	rootCmd.AddCommand(versionCmd())
 
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("failed to execute root command: %v", err)
+		log.Fatalf("Failed to execute root command: %v", err)
 	}
 }
