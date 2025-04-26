@@ -24,15 +24,15 @@ The instrumentation system consists of the following components:
 │             │                             │                 │
 │  Code       │     Insertion Engine        │  Runtime        │
 │  Generation │                             │  Components     │
-│  ┌─────────┐│  ┌─────────┐   ┌──────────┐ │  ┌─────────┐    │
-│  │ Template││  │ AST     │   │ Code     │ │  │ Track   │    │
-│  │ Engine  ││  │ Analysis│──▶│ Insertion│ │  │ Function│    │
-│  └─────────┘│  └─────────┘   └──────────┘ │  └─────────┘    │
+│ ┌─────────┐ │  ┌─────────┐   ┌──────────┐ │  ┌─────────┐    │
+│ │ Template│ │  │ AST     │   │ Code     │ │  │ Track   │    │
+│ │ Engine  │ │  │ Analysis│──▶│ Insertion│ │  │ Function│    │
+│ └─────────┘ │  └─────────┘   └──────────┘ │  └─────────┘    │
 │             │        │            │       │       ▲         │
-│  ┌─────────┐│        │            │       │       │         │
-│  │ Values  ││        │            │       │       │         │
-│  │ Builder ││        ▼            ▼       │       │         │
-│  └─────────┘│  ┌─────────────────────┐    │  ┌─────────┐    │
+│ ┌─────────┐ │        │            │       │       │         │
+│ │ Values  │ │        │            │       │       │         │
+│ │ Builder │ │        ▼            ▼       │       │         │
+│ └─────────┘ │  ┌─────────────────────┐    │  ┌─────────┐    │
 │             │  │    Granularity      │    │  │ HTTP    │    │
 │             │  │      System         │────┼─▶│ Service │    │
 │             │  └─────────────────────┘    │  └─────────┘    │

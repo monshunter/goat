@@ -10,6 +10,15 @@
 
 `GOAT` (Golang Application Tracing) is a high-performance code tracing tool for gray releases, designed specifically for Go applications. It automatically identifies and tracks the execution of incremental code, helping developers make more reliable decisions during the gray release process. Through automated instrumentation and real-time tracking, GOAT provides internal evidence to ensure that incremental features are thoroughly tested during the gray release process.
 
+## 🏗️ Architecture
+
+![GOAT Architecture](docs/images/goat-architecture.svg)
+
+The GOAT system consists of three main layers:
+1. **CLI Layer**: Handles user commands and configuration management
+2. **Core Processing**: Performs diff analysis, tracking, and code insertion
+3. **Runtime Components**: Provides HTTP service and metrics collection during application execution
+
 ## 🚀 Features
 
 * Automatically identifies effective incremental code, precisely locating modification points

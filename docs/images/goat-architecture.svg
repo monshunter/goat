@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="600" fill="#f8f9fa" rx="10" ry="10"/>
+
+  <!-- Title -->
+  <text x="400" y="40" font-family="Arial" font-size="24" text-anchor="middle" font-weight="bold" fill="#333">GOAT Architecture</text>
+
+  <!-- Main Container -->
+  <rect x="50" y="70" width="700" height="480" fill="#fff" stroke="#ddd" stroke-width="2" rx="8" ry="8"/>
+
+  <!-- CLI Layer -->
+  <rect x="80" y="100" width="200" height="120" fill="#e1f5fe" stroke="#81d4fa" stroke-width="2" rx="5" ry="5"/>
+  <text x="180" y="125" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold" fill="#0277bd">CLI Layer</text>
+  <rect x="100" y="140" width="160" height="60" fill="#fff" stroke="#81d4fa" stroke-width="1" rx="3" ry="3"/>
+  <text x="180" y="175" font-family="Arial" font-size="14" text-anchor="middle" fill="#0277bd">Command Parser</text>
+
+  <!-- Core Processing -->
+  <rect x="300" y="100" width="200" height="400" fill="#e8f5e9" stroke="#a5d6a7" stroke-width="2" rx="5" ry="5"/>
+  <text x="400" y="125" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold" fill="#2e7d32">Core Processing</text>
+
+  <!-- Config Management -->
+  <rect x="320" y="140" width="160" height="60" fill="#fff" stroke="#a5d6a7" stroke-width="1" rx="3" ry="3"/>
+  <text x="400" y="175" font-family="Arial" font-size="14" text-anchor="middle" fill="#2e7d32">Config Management</text>
+
+  <!-- Diff Analysis -->
+  <rect x="320" y="220" width="160" height="60" fill="#fff" stroke="#a5d6a7" stroke-width="1" rx="3" ry="3"/>
+  <text x="400" y="255" font-family="Arial" font-size="14" text-anchor="middle" fill="#2e7d32">Diff Analysis</text>
+
+  <!-- Tracking System -->
+  <rect x="320" y="300" width="160" height="60" fill="#fff" stroke="#a5d6a7" stroke-width="1" rx="3" ry="3"/>
+  <text x="400" y="335" font-family="Arial" font-size="14" text-anchor="middle" fill="#2e7d32">Tracking System</text>
+
+  <!-- Code Insertion -->
+  <rect x="320" y="380" width="160" height="60" fill="#fff" stroke="#a5d6a7" stroke-width="1" rx="3" ry="3"/>
+  <text x="400" y="415" font-family="Arial" font-size="14" text-anchor="middle" fill="#2e7d32">Code Insertion</text>
+
+  <!-- Runtime Components -->
+  <rect x="520" y="100" width="200" height="200" fill="#fff3e0" stroke="#ffcc80" stroke-width="2" rx="5" ry="5"/>
+  <text x="620" y="125" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold" fill="#ef6c00">Runtime Components</text>
+
+  <!-- HTTP Service -->
+  <rect x="540" y="140" width="160" height="60" fill="#fff" stroke="#ffcc80" stroke-width="1" rx="3" ry="3"/>
+  <text x="620" y="175" font-family="Arial" font-size="14" text-anchor="middle" fill="#ef6c00">HTTP Service</text>
+
+  <!-- Metrics Collection -->
+  <rect x="540" y="220" width="160" height="60" fill="#fff" stroke="#ffcc80" stroke-width="1" rx="3" ry="3"/>
+  <text x="620" y="255" font-family="Arial" font-size="14" text-anchor="middle" fill="#ef6c00">Metrics Collection</text>
+
+  <!-- Workflow -->
+  <rect x="80" y="350" width="200" height="200" fill="#f3e5f5" stroke="#ce93d8" stroke-width="2" rx="5" ry="5"/>
+  <text x="180" y="375" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold" fill="#7b1fa2">Workflow</text>
+
+  <!-- Workflow Steps -->
+  <text x="100" y="405" font-family="Arial" font-size="14" fill="#7b1fa2">1. Initialization</text>
+  <text x="100" y="435" font-family="Arial" font-size="14" fill="#7b1fa2">2. Difference Analysis</text>
+  <text x="100" y="465" font-family="Arial" font-size="14" fill="#7b1fa2">3. Intelligent Instrumentation</text>
+  <text x="100" y="495" font-family="Arial" font-size="14" fill="#7b1fa2">4. Runtime Monitoring</text>
+  <text x="100" y="525" font-family="Arial" font-size="14" fill="#7b1fa2">5. Status Display</text>
+
+  <!-- Arrows -->
+  <!-- CLI to Config Management -->
+  <path d="M 280 170 L 320 170" stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Config Management to Diff Analysis -->
+  <path d="M 400 200 L 400 220" stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Diff Analysis to Tracking System -->
+  <path d="M 400 280 L 400 300" stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Tracking System to Code Insertion -->
+  <path d="M 400 360 L 400 380" stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Config Management to HTTP Service (bidirectional influence) -->
+  <path d="M 480 170 L 540 170" stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Tracking System to HTTP Service -->
+  <path d="M 480 320 L 540 200" stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- HTTP Service to Metrics Collection -->
+  <path d="M 620 200 L 620 220" stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Arrow Marker -->
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#666"/>
+    </marker>
+  </defs>
+
+  <!-- Legend -->
+  <rect x="520" y="350" width="200" height="130" fill="#fafafa" stroke="#ddd" stroke-width="1" rx="5" ry="5"/>
+  <text x="620" y="375" font-family="Arial" font-size="16" text-anchor="middle" font-weight="bold" fill="#333">Legend</text>
+
+  <!-- Legend Items -->
+  <rect x="540" y="390" width="20" height="20" fill="#e1f5fe" stroke="#81d4fa" stroke-width="1"/>
+  <text x="570" y="405" font-family="Arial" font-size="14" fill="#333" x-anchor="start">CLI Components</text>
+
+  <rect x="540" y="420" width="20" height="20" fill="#e8f5e9" stroke="#a5d6a7" stroke-width="1"/>
+  <text x="570" y="435" font-family="Arial" font-size="14" fill="#333" x-anchor="start">Core Processing</text>
+
+  <rect x="540" y="450" width="20" height="20" fill="#fff3e0" stroke="#ffcc80" stroke-width="1"/>
+  <text x="570" y="465" font-family="Arial" font-size="14" fill="#333" x-anchor="start">Runtime Components</text>
+</svg>

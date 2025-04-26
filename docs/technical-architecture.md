@@ -15,15 +15,15 @@ GOAT follows a modular architecture with several key components working together
 │             │                             │                 │
 │  CLI Layer  │     Core Processing         │  Runtime        │
 │             │                             │  Components     │
-│  ┌─────────┐│  ┌─────────┐   ┌──────────┐ │  ┌─────────┐    │
-│  │ Command ││  │  Diff   │   │Tracking  │ │  │ HTTP    │    │
-│  │ Parser  ││  │ Analysis│──▶│ System   │ │  │ Service │    │
-│  └─────────┘│  └─────────┘   └──────────┘ │  └─────────┘    │
+│ ┌─────────┐ │  ┌─────────┐   ┌──────────┐ │  ┌─────────┐    │
+│ │ Command │ │  │  Diff   │   │Tracking  │ │  │ HTTP    │    │
+│ │ Parser  │ │  │ Analysis│──▶│ System   │ │  │ Service │    │
+│ └─────────┘ │  └─────────┘   └──────────┘ │  └─────────┘    │
 │             │        │            │       │       ▲         │
-│  ┌─────────┐│        │            │       │       │         │
-│  │ Config  ││        │            │       │       │         │
-│  │ Manager ││        ▼            ▼       │       │         │
-│  └─────────┘│  ┌─────────────────────┐    │       │         │
+│ ┌─────────┐ │        │            │       │       │         │
+│ │ Config  │ │        │            │       │       │         │
+│ │ Manager │ │        ▼            ▼       │       │         │
+│ └─────────┘ │  ┌─────────────────────┐    │       │         │
 │             │  │    Code Insertion   │    │       │         │
 │             │  │      System         │────┼───────┘         │
 │             │  └─────────────────────┘    │                 │

@@ -23,15 +23,15 @@ The diff analysis system consists of the following components:
 │             │                             │                 │
 │  Repository │     Diff Engines            │  Output         │
 │  Interface  │                             │  Structures     │
-│  ┌─────────┐│  ┌─────────┐   ┌─────────┐  │  ┌───────────┐  │
-│  │ Git     ││  │DifferV1 │   │DifferV2 │  │  │FileChange │  │
-│  │ Access  ││  │(blame)  │   │(diff)   │  │  │           │  │
-│  └─────────┘│  └─────────┘   └─────────┘  │  └───────────┘  │
+│ ┌─────────┐ │  ┌─────────┐   ┌─────────┐  │  ┌───────────┐  │
+│ │ Git     │ │  │DifferV1 │   │DifferV2 │  │  │FileChange │  │
+│ │ Access  │ │  │(blame)  │   │(diff)   │  │  │           │  │
+│ └─────────┘ │  └─────────┘   └─────────┘  │  └───────────┘  │
 │             │                             │                 │
-│  ┌─────────┐│  ┌─────────┐                │  ┌───────── ┐   |
-│  │ Commit  ││  │DifferV3 │                │  │LineChange│   │
-│  │ Resolver││  │(diff)   │                │  │          │   │
-│  └─────────┘│  └─────────┘                │  └───────── ┘   │
+│ ┌─────────┐ │  ┌─────────┐                │  ┌──────────┐   |
+│ │ Commit  │ │  │DifferV3 │                │  │LineChange│   │
+│ │ Resolver│ │  │(diff)   │                │  │          │   │
+│ └─────────┘ │  └─────────┘                │  └──────────┘   │
 └─────────────┴─────────────────────────────┴─────────────────┘
 ```
 
@@ -45,7 +45,7 @@ The diff analysis system consists of the following components:
 
 GOAT supports three precision modes for diff analysis, each with different trade-offs between accuracy and performance:
 
-### Precision Level 1 (High Precision)
+### Precision Level: 1 (High Precision)
 
 **Implementation**: `DifferV1`
 
@@ -105,7 +105,7 @@ func (d *DifferV1) analyzeChange(change *object.Change) (*FileChange, error) {
 }
 ```
 
-### Precision Level 2 (Medium Precision)
+### Precision Level: 2 (Medium Precision)
 
 **Implementation**: `DifferV2`
 
@@ -161,7 +161,7 @@ func (d *DifferV2) analyzeChange(filePatch diff.FilePatch) *FileChange {
 }
 ```
 
-### Precision Level 3 (Low Precision)
+### Precision Level: 3 (Low Precision)
 
 **Implementation**: `DifferV3`
 
@@ -321,7 +321,7 @@ func (d *DifferV1) AnalyzeChanges() ([]*FileChange, error) {
 
 ## Technical Algorithms
 
-### Git Blame Analysis (Precision Level 1)
+### Git Blame Analysis (Precision Level: 1)
 
 The Git blame analysis algorithm works as follows:
 
@@ -332,7 +332,7 @@ The Git blame analysis algorithm works as follows:
 
 This approach provides the most accurate results but is computationally expensive, especially for large files with complex history.
 
-### Unified Diff Parsing (Precision Levels 2 and 3)
+### Unified Diff Parsing (Precision Levels: 2 and 3)
 
 The unified diff parsing algorithm works as follows:
 
@@ -357,9 +357,9 @@ Typical performance characteristics:
 
 | Precision Level | Small Repository | Medium Repository | Large Repository |
 |-----------------|------------------|-------------------|------------------|
-| Level 1 (High)  | 1-5 seconds      | 10-30 seconds     | 1-5 minutes      |
-| Level 2 (Medium)| 0.1-0.5 seconds  | 1-3 seconds       | 5-30 seconds     |
-| Level 3 (Low)   | 0.05-0.2 seconds | 0.5-1 seconds     | 2-10 seconds     |
+|  1 (High)  | 1-5 seconds      | 10-30 seconds     | 1-5 minutes      |
+|  2 (Medium)| 0.1-0.5 seconds  | 1-3 seconds       | 5-30 seconds     |
+|  3 (Low)   | 0.05-0.2 seconds | 0.5-1 seconds     | 2-10 seconds     |
 
 ## Technical Limitations
 
