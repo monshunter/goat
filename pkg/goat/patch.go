@@ -111,6 +111,9 @@ func (f *PatchExecutor) prepareContentsSequential(files []string) ([]goatFile, e
 			log.Errorf("Failed to prepare content: %v", err)
 			return nil, err
 		}
+		if goatFile.filename == "" || goatFile.content == "" {
+			continue
+		}
 		goatFiles = append(goatFiles, goatFile)
 	}
 	return goatFiles, nil
@@ -149,6 +152,9 @@ func (f *PatchExecutor) prepareContentsParallel(files []string) ([]goatFile, err
 	}
 	close(fileChan)
 	for goatFile := range fileChan {
+		if goatFile.filename == "" || goatFile.content == "" {
+			continue
+		}
 		goatFiles = append(goatFiles, goatFile)
 	}
 	return goatFiles, nil
