@@ -161,7 +161,7 @@ For more examples, check the [examples directory](examples/README.md).
 
 ## 🔋 Development Environment Requirements
 
-- Go 1.21+
+- Go 1.23+
 - Git
 
 ## 📊 Instrumentation Data Monitoring

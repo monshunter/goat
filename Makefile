@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint cover fmt help install uninstall clean-cache kill-build
+.PHONY: all build clean test lint cover fmt help install uninstall clean-cache kill-build release package-release
 
 # Set Go environment variables
 GOCMD=go
@@ -76,6 +76,46 @@ kill-build:
 	@echo "Killing all Go processes..."
 	@pgrep go | xargs kill -9 2>/dev/null || echo "No Go processes found"
 
+# Build release binaries for multiple platforms
+release:
+	@echo "Building release binaries..."
+	mkdir -p $(BUILD_DIR)/release
+
+	# Linux builds
+	GOOS=linux GOARCH=amd64 $(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/release/$(BINARY_NAME)_linux_amd64 ./cmd/goat
+	GOOS=linux GOARCH=arm64 $(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/release/$(BINARY_NAME)_linux_arm64 ./cmd/goat
+	GOOS=linux GOARCH=386 $(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/release/$(BINARY_NAME)_linux_386 ./cmd/goat
+
+	# macOS builds
+	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/release/$(BINARY_NAME)_darwin_amd64 ./cmd/goat
+	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/release/$(BINARY_NAME)_darwin_arm64 ./cmd/goat
+
+	# Windows builds
+	GOOS=windows GOARCH=amd64 $(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/release/$(BINARY_NAME)_windows_amd64.exe ./cmd/goat
+	GOOS=windows GOARCH=386 $(GOBUILD) $(BUILD_FLAGS) -o $(BUILD_DIR)/release/$(BINARY_NAME)_windows_386.exe ./cmd/goat
+
+	@echo "Release binaries built in $(BUILD_DIR)/release/"
+
+# Package release binaries into compressed archives
+package-release: release
+	@echo "Packaging release binaries..."
+	mkdir -p $(BUILD_DIR)/packages
+
+	# Create archives for Linux binaries
+	tar -czf $(BUILD_DIR)/packages/$(BINARY_NAME)_$(VERSION)_linux_amd64.tar.gz -C $(BUILD_DIR)/release $(BINARY_NAME)_linux_amd64
+	tar -czf $(BUILD_DIR)/packages/$(BINARY_NAME)_$(VERSION)_linux_arm64.tar.gz -C $(BUILD_DIR)/release $(BINARY_NAME)_linux_arm64
+	tar -czf $(BUILD_DIR)/packages/$(BINARY_NAME)_$(VERSION)_linux_386.tar.gz -C $(BUILD_DIR)/release $(BINARY_NAME)_linux_386
+
+	# Create archives for macOS binaries
+	tar -czf $(BUILD_DIR)/packages/$(BINARY_NAME)_$(VERSION)_darwin_amd64.tar.gz -C $(BUILD_DIR)/release $(BINARY_NAME)_darwin_amd64
+	tar -czf $(BUILD_DIR)/packages/$(BINARY_NAME)_$(VERSION)_darwin_arm64.tar.gz -C $(BUILD_DIR)/release $(BINARY_NAME)_darwin_arm64
+
+	# Create archives for Windows binaries
+	zip -j $(BUILD_DIR)/packages/$(BINARY_NAME)_$(VERSION)_windows_amd64.zip $(BUILD_DIR)/release/$(BINARY_NAME)_windows_amd64.exe
+	zip -j $(BUILD_DIR)/packages/$(BINARY_NAME)_$(VERSION)_windows_386.zip $(BUILD_DIR)/release/$(BINARY_NAME)_windows_386.exe
+
+	@echo "Release packages created in $(BUILD_DIR)/packages/"
+
 # Help information
 help:
 	@echo "Available commands:"
@@ -92,3 +132,5 @@ help:
 	@echo "  make clean       - Clean build files"
 	@echo "  make clean-cache - Clean Go cache"
 	@echo "  make kill-build  - Kill all Go processes (when build hangs)"
+	@echo "  make release     - Build release binaries for multiple platforms"
+	@echo "  make package-release - Build and package release binaries"

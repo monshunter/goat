@@ -44,7 +44,7 @@ GOAT follows a modular architecture with several key components working together
 
 The diff analysis system is responsible for identifying code changes between two branches (typically stable and release branches). GOAT supports three different precision modes for diff analysis:
 
-1. **Precision Level 1 (High Precision)**: 
+1. **Precision Level 1 (High Precision)**:
    - Uses `git blame` to get file change history
    - Highest precision but worst performance
    - Implemented in `DifferV1`
@@ -317,7 +317,7 @@ GOAT is designed to integrate seamlessly into the gray release workflow:
 
 1. **Go Language Specificity**:
    - GOAT is specifically designed for Go applications and cannot be used with other languages
-   - Requires Go 1.21+ for full functionality
+   - Requires Go 1.23+ for full functionality
 
 2. **Git Dependency**:
    - Relies on Git for diff analysis

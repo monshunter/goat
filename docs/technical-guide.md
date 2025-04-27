@@ -31,7 +31,7 @@ GOAT consists of several key components:
 
 ### Prerequisites
 
-- Go 1.21 or higher
+- Go 1.23 or higher
 - Git
 - A Go project with a valid Git repository
 
@@ -243,7 +243,7 @@ The tracking code inserted by GOAT consists of the following components:
 
 1. **Import Statement**:
    ```go
-   import goat "go-module/goat" 
+   import goat "go-module/goat"
    ```
 
 2. **Tracking Call**:
