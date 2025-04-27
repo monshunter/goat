@@ -4,7 +4,7 @@
 [![GoDoc](https://godoc.org/github.com/monshunter/goat?status.svg)](https://godoc.org/github.com/monshunter/goat)
 [![License](https://img.shields.io/github/license/monshunter/goat)](https://github.com/monshunter/goat/blob/main/LICENSE)
 
-[中文文档](README_ZH.md)
+[中文文档](README_ZH.md) [Wiki](https://deepwiki.com/monshunter/goat)
 
 ## 📖 Introduction
 
