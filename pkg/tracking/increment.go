@@ -700,6 +700,25 @@ func (t *IncrementalTrack) processStatements(statList []ast.Stmt, fset *token.Fi
 			}
 		case *ast.LabeledStmt:
 			t.processStatements([]ast.Stmt{s.Stmt}, fset)
+		// Improve:
+		// 1. Add tracking statements to the declaration statement with value specs with init value
+		// 2. Ignore the declaration statement with type specs and value specs without init value
+		// This improvement ensures more comprehensive code coverage by trackingexecutable code in
+		// variable declarations, which was previously missed by the tracking system.
+		case *ast.DeclStmt:
+			if s.Decl != nil {
+				switch decl := s.Decl.(type) {
+				case *ast.GenDecl:
+					for _, spec := range decl.Specs {
+						switch spec := spec.(type) {
+						case *ast.ValueSpec:
+							if len(spec.Values) > 0 {
+								t.checkAndMarkInsert(fset.Position(s.Pos()).Line)
+							}
+						}
+					}
+				}
+			}
 		default:
 			t.checkAndMarkInsert(fset.Position(s.Pos()).Line)
 		}
