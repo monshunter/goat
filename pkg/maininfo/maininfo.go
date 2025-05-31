@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/monshunter/goat/pkg/config"
 	"github.com/monshunter/goat/pkg/log"
 	"github.com/monshunter/goat/pkg/utils"
 )
@@ -61,23 +62,20 @@ func (m *MainPackageInfo) ApplyMainEntry(cfg *printer.Config, packageAlias strin
 
 // MainInfo represents information about a main package
 type MainInfo struct {
+	cfg              *config.Config
 	ProjectRoot      string            `json:"projectRoot"`
 	Module           string            `json:"module"`
 	MainPackageInfos []MainPackageInfo `json:"mainPackageInfos"`
 }
 
-// NewMainInfo creates a new MainInfo instance
-func NewMainInfo(projectRoot string, goModule string, ignores []string) (*MainInfo, error) {
-	return NewMainInfoWithConfig(projectRoot, goModule, ignores, true) // default to skipping nested modules
-}
-
 // NewMainInfoWithConfig creates a new MainInfo instance with configuration
-func NewMainInfoWithConfig(projectRoot string, goModule string, ignores []string, skipNestedModules bool) (*MainInfo, error) {
+func NewMainInfoWithConfig(cfg *config.Config, projectRoot string, goModule string) (*MainInfo, error) {
 	mainInfo := &MainInfo{
+		cfg:         cfg,
 		ProjectRoot: projectRoot,
 		Module:      goModule,
 	}
-	mainPackageInfos, err := mainInfo.analyzeMainPackages(ignores, skipNestedModules)
+	mainPackageInfos, err := mainInfo.analyzeMainPackages()
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +89,7 @@ func NewMainInfoWithConfig(projectRoot string, goModule string, ignores []string
 }
 
 // analyzeMainPackagesWithConfig analyzes all main packages with configuration
-func (m *MainInfo) analyzeMainPackages(ignores []string, skipNestedModules bool) ([]MainPackageInfo, error) {
+func (m *MainInfo) analyzeMainPackages() ([]MainPackageInfo, error) {
 	// find all Go files
 	var goFiles []string
 	err := filepath.Walk(m.ProjectRoot, func(path string, info os.FileInfo, err error) error {
@@ -99,9 +97,9 @@ func (m *MainInfo) analyzeMainPackages(ignores []string, skipNestedModules bool)
 			return err
 		}
 		if info.IsDir() {
-			if !utils.IsTargetDir(path, ignores, skipNestedModules) {
+			if !m.cfg.IsTargetDir(path) {
 				// Log when skipping nested modules for user awareness
-				if skipNestedModules && path != "." && utils.IsBelongtoNestedGoModule(path) {
+				if m.cfg.SkipNestedModules && path != "." && m.cfg.IsBelongNestedModule(path) {
 					log.Warningf("Skipping nested module directory: %s", path)
 				}
 				return filepath.SkipDir
@@ -109,7 +107,7 @@ func (m *MainInfo) analyzeMainPackages(ignores []string, skipNestedModules bool)
 			return nil
 		}
 
-		if !utils.IsTargetFile(path, ignores, skipNestedModules) {
+		if !m.cfg.IsTargetFile(path) {
 			return nil
 		}
 		goFiles = append(goFiles, path)

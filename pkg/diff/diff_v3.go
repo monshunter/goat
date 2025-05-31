@@ -7,7 +7,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
 	"github.com/monshunter/goat/pkg/config"
-	"github.com/monshunter/goat/pkg/utils"
 )
 
 // This version cannot recognize the scenario of file migration and modification.
@@ -96,7 +95,7 @@ func (d *DifferV3) analyzeChange(change *object.Change) (*FileChange, error) {
 // handleInsert handles insert or modify operations
 func (d *DifferV3) handleInsert(change *object.Change) (*FileChange, error) {
 	fileName := change.To.Name
-	if !utils.IsTargetFile(fileName, d.cfg.Ignores, d.cfg.SkipNestedModules) {
+	if !d.cfg.IsTargetFile(fileName) {
 		return nil, nil
 	}
 	patch, err := change.Patch()

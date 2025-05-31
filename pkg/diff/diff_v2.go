@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing/format/diff"
 	"github.com/monshunter/goat/pkg/config"
-	"github.com/monshunter/goat/pkg/utils"
 )
 
 // DifferV2 is the second version of the code difference analyzer
@@ -61,7 +60,7 @@ func (d *DifferV2) analyzeChange(filePatch diff.FilePatch) *FileChange {
 	if (from == nil && to == nil) || (from != nil && to == nil) {
 		return nil
 	}
-	if !utils.IsTargetFile(to.Path(), d.cfg.Ignores, d.cfg.SkipNestedModules) {
+	if !d.cfg.IsTargetFile(to.Path()) {
 		return nil
 	}
 	lineChanges := getLineChange(filePatch)

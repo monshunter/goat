@@ -129,13 +129,13 @@ func getTotalTrackIdxs(fileTrackIdStartMap map[string]trackIdxInterval) []int {
 }
 
 // getMainPackageInfos gets the main package infos
-func getMainPackageInfos(projectRoot string, goModule string, ignores []string) ([]maininfo.MainPackageInfo, error) {
-	return getMainPackageInfosWithConfig(projectRoot, goModule, ignores, true) // default to skipping nested modules
+func getMainPackageInfos(cfg *config.Config, projectRoot string, goModule string) ([]maininfo.MainPackageInfo, error) {
+	return getMainPackageInfosWithConfig(cfg, projectRoot, goModule)
 }
 
 // getMainPackageInfosWithConfig gets the main package infos with configuration
-func getMainPackageInfosWithConfig(projectRoot string, goModule string, ignores []string, skipNestedModules bool) ([]maininfo.MainPackageInfo, error) {
-	mainPkgInfo, err := maininfo.NewMainInfoWithConfig(projectRoot, goModule, ignores, skipNestedModules)
+func getMainPackageInfosWithConfig(cfg *config.Config, projectRoot string, goModule string) ([]maininfo.MainPackageInfo, error) {
+	mainPkgInfo, err := maininfo.NewMainInfoWithConfig(cfg, projectRoot, goModule)
 	if err != nil {
 		log.Errorf("Failed to get main info: %v", err)
 		return nil, err
@@ -260,9 +260,9 @@ func prepareFiles(cfg *config.Config) (files []string, err error) {
 			return err
 		}
 		if info.IsDir() {
-			if !utils.IsTargetDir(path, cfg.Ignores, cfg.SkipNestedModules) {
+			if !cfg.IsTargetDir(path) {
 				// Log when skipping nested modules for user awareness
-				if cfg.SkipNestedModules && path != "." && utils.IsBelongtoNestedGoModule(path) {
+				if cfg.SkipNestedModules && path != "." && cfg.IsBelongNestedModule(path) {
 					log.Warningf("Skipping nested module directory: %s", path)
 				}
 				return filepath.SkipDir

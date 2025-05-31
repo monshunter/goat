@@ -115,7 +115,7 @@ func (t *TrackExecutor) initChanges() error {
 // initMainPackageInfos initializes the main package infos
 func (t *TrackExecutor) initMainPackageInfos() error {
 	log.Infof("Getting main package infos")
-	mainPkgInfos, err := getMainPackageInfosWithConfig(".", t.goModule, t.cfg.Ignores, t.cfg.SkipNestedModules)
+	mainPkgInfos, err := getMainPackageInfos(t.cfg, ".", t.goModule)
 	if err != nil {
 		return fmt.Errorf("failed to get main package info: %w", err)
 	}

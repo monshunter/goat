@@ -8,9 +8,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
+	"sync"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/monshunter/goat/pkg/utils"
 	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v3"
 )
@@ -279,6 +282,12 @@ type Config struct {
 	Verbose bool `yaml:"verbose"` // default: false
 	// Skip sub directories containing go.mod files
 	SkipNestedModules bool `yaml:"skipNestedModules"` // default: true
+
+	// Internal fields for caching (not serialized to YAML)
+	// nestedModuleCache caches the results of nested module detection
+	nestedModuleCache sync.Map `yaml:"-"`
+	// projectRoot is the absolute path to the project root
+	projectRoot string `yaml:"-"`
 }
 
 // Validate validates the config
@@ -390,6 +399,15 @@ func (c *Config) Validate() error {
 	}
 	if !found {
 		c.Ignores = append(c.Ignores, goatFile)
+	}
+
+	// Initialize project root for caching
+	if c.projectRoot == "" {
+		projectRoot, err := filepath.Abs(".")
+		if err != nil {
+			return fmt.Errorf("failed to get project root: %w", err)
+		}
+		c.projectRoot = projectRoot
 	}
 
 	return nil
@@ -517,4 +535,113 @@ func GoModuleName() string {
 		panic(fmt.Sprintf("failed to parse go.mod file: %v", err))
 	}
 	return modFile.Module.Mod.Path
+}
+
+// IsBelongNestedModule checks if a directory belongs to a nested Go module by searching upwards
+// through the directory hierarchy until reaching the project root.
+// Results are cached using sync.Map with prefix matching for performance.
+func (c *Config) IsBelongNestedModule(dir string) bool {
+	// Get absolute path to handle relative paths correctly
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+
+	// Check cache first - look for exact match or prefix match
+	if cached, ok := c.nestedModuleCache.Load(absDir); ok {
+		return cached.(bool)
+	}
+
+	// Check if any parent directory is already cached as a nested module
+	currentDir := absDir
+	for {
+		if cached, ok := c.nestedModuleCache.Load(currentDir); ok {
+			result := cached.(bool)
+			if result {
+				// Parent is a nested module, so this directory is also part of it
+				c.nestedModuleCache.Store(absDir, true)
+				return true
+			}
+		}
+
+		// Move to parent directory
+		parentDir := filepath.Dir(currentDir)
+		if parentDir == currentDir || !strings.HasPrefix(parentDir, c.projectRoot) {
+			break
+		}
+		currentDir = parentDir
+	}
+
+	// No cached result found, perform the actual check
+	result := c.isBelongUncached(absDir)
+	c.nestedModuleCache.Store(absDir, result)
+	return result
+}
+
+// isBelongUncached performs the actual nested module detection without caching
+func (c *Config) isBelongUncached(absDir string) bool {
+	// Start from the given directory and search upwards
+	currentDir := absDir
+	for {
+		// Don't check the project root itself - we only care about nested modules
+		if currentDir == c.projectRoot {
+			break
+		}
+
+		// Check if current directory contains go.mod
+		goModPath := filepath.Join(currentDir, "go.mod")
+		if _, err := os.Stat(goModPath); err == nil {
+			return true
+		}
+
+		// Move to parent directory
+		parentDir := filepath.Dir(currentDir)
+
+		// If we've reached the filesystem root or can't go further up, stop
+		if parentDir == currentDir {
+			break
+		}
+
+		// If we've gone above the project root, stop
+		if !strings.HasPrefix(parentDir, c.projectRoot) {
+			break
+		}
+
+		currentDir = parentDir
+	}
+
+	return false
+}
+
+// IsTargetDir checks if the directory is a target directory
+func (c *Config) IsTargetDir(dir string) bool {
+	// check if the dir is in the excludes
+	if dir == "vendor" || dir == "testdata" || dir == "node_modules" {
+		return false
+	}
+	// check if the dir is in the excludes
+	segments := strings.Split(dir, "/")
+	for _, segment := range segments {
+		if segment == "testdata" {
+			return false
+		}
+	}
+	// check if the file is in the excludes
+	for _, exclude := range c.Ignores {
+		if dir == exclude || strings.HasPrefix(dir, exclude) {
+			return false
+		}
+	}
+
+	// check if this directory contains a nested go.mod file (skip nested modules)
+	if c.SkipNestedModules && dir != "." && c.IsBelongNestedModule(dir) {
+		return false
+	}
+
+	return true
+}
+
+// IsTargetFile checks if the file is a target file
+func (c *Config) IsTargetFile(fileName string) bool {
+	return c.IsTargetDir(filepath.Dir(fileName)) && utils.IsGoFile(fileName)
 }

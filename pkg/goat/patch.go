@@ -67,7 +67,7 @@ func (p *PatchExecutor) Run() error {
 // initMainPackageInfos initializes the main package infos
 func (p *PatchExecutor) initMainPackageInfos() error {
 	log.Infof("Getting main package infos")
-	mainPkgInfos, err := getMainPackageInfosWithConfig(".", p.goModule, p.cfg.Ignores, p.cfg.SkipNestedModules)
+	mainPkgInfos, err := getMainPackageInfos(p.cfg, ".", p.goModule)
 	if err != nil {
 		return err
 	}

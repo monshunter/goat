@@ -9,7 +9,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
 	"github.com/monshunter/goat/pkg/config"
-	"github.com/monshunter/goat/pkg/utils"
 )
 
 // DifferV1 is the first version of the code difference analyzer
@@ -100,7 +99,7 @@ func (d *DifferV1) analyzeChange(change *object.Change) (*FileChange, error) {
 // handleInsert handles insert or modify operations
 func (d *DifferV1) handleInsert(change *object.Change) (*FileChange, error) {
 	fileName := change.To.Name
-	if !utils.IsTargetFile(fileName, d.cfg.Ignores, d.cfg.SkipNestedModules) {
+	if !d.cfg.IsTargetFile(fileName) {
 		return nil, nil
 	}
 	fc := FileChange{
