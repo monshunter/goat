@@ -189,11 +189,11 @@ func (g Granularity) IsScope() bool {
 // DataType is the type of the data
 type DataType int
 
-// DataTypeTruth is the truth type
+// DataTypeBool is the bool type
 const (
 	_ DataType = iota
-	// DataTypeTruth is the truth type
-	DataTypeTruth // default
+	// DataTypeBool is the bool type
+	DataTypeBool // default
 	// DataTypeCount is the count type
 	DataTypeCount
 )
@@ -206,7 +206,7 @@ func (d DataType) String() string {
 // IsValid checks if the data type is valid
 func (d DataType) IsValid() bool {
 	switch d {
-	case DataTypeTruth, DataTypeCount:
+	case DataTypeBool, DataTypeCount:
 		return true
 	default:
 		return false
@@ -215,7 +215,7 @@ func (d DataType) IsValid() bool {
 
 // dataTypeNames is the names of the data types
 var dataTypeNames = []string{
-	DataTypeTruth: "truth",
+	DataTypeBool:  "bool",
 	DataTypeCount: "count",
 }
 
@@ -226,12 +226,12 @@ func (d DataType) Int() int {
 
 func GetDataType(s string) (DataType, error) {
 	switch s {
-	case "truth":
-		return DataTypeTruth, nil
+	case "bool":
+		return DataTypeBool, nil
 	case "count":
 		return DataTypeCount, nil
 	default:
-		return DataTypeTruth, fmt.Errorf("invalid data type: %s", s)
+		return DataTypeBool, fmt.Errorf("invalid data type: %s", s)
 	}
 }
 
@@ -274,9 +274,11 @@ type Config struct {
 	// printerConfig is the printer config
 	printerConfig *printer.Config `yaml:"-"`
 	// Data type
-	DataType string `yaml:"dataType"` // default: truth
+	DataType string `yaml:"dataType"` // default: bool
 	// Verbose output
 	Verbose bool `yaml:"verbose"` // default: false
+	// Skip sub directories containing go.mod files
+	SkipNestedModules bool `yaml:"skipNestedModules"` // default: true
 }
 
 // Validate validates the config
@@ -362,7 +364,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.DataType == "" {
-		c.DataType = "truth"
+		c.DataType = "bool"
 	}
 
 	dt, err := GetDataType(c.DataType)
@@ -370,6 +372,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid data type: %w", err)
 	}
 	c.DataType = dt.String()
+
+	// Default to skipping nested modules for safety and simplicity
+	// Note: This field defaults to true for safety, but we only set it if it wasn't
+	// explicitly configured by the user. Since we can't distinguish between
+	// "not set" and "explicitly set to false" in YAML, we'll leave the user's
+	// choice intact if they've set it via command line or config file.
 
 	// ignore goat_generated.go
 	goatFile := c.GoatGeneratedFile()
@@ -431,7 +439,7 @@ func (c *Config) PrinterConfig() *printer.Config {
 func (c *Config) GetDataType() DataType {
 	dt, err := GetDataType(c.DataType)
 	if err != nil {
-		return DataTypeTruth
+		return DataTypeBool
 	}
 	return dt
 }

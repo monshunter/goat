@@ -405,8 +405,8 @@ printerConfigTabwidth: 8
 ## Printer config indent (default: 0)
 printerConfigIndent: 0
 
-## Data type ([truth, count], default: truth)
-dataType: truth
+## Data type ([bool, count], default: bool)
+dataType: bool
 
 ## Verbose output (default: false)
 verbose: false

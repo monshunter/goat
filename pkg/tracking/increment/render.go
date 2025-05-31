@@ -72,6 +72,10 @@ func (v *Values) Validate() error {
 	return nil
 }
 
+func (v *Values) IsEmpty() bool {
+	return len(v.Components) == 0 || len(v.TrackIds) == 0
+}
+
 // MergeValues merges the content of another Values object into the current Values
 func (v *Values) MergeValues(other *Values) {
 	// Merge Components
@@ -197,26 +201,6 @@ func (v *Values) Remove(outputPath string) error {
 	return os.Remove(outputPath)
 }
 
-// SaveWithCustomTemplate renders with a custom template and saves to a file
-func (v *Values) SaveWithCustomTemplate(outputPath, customTemplate string) error {
-	if err := v.Validate(); err != nil {
-		return err
-	}
-
-	data, err := v.RenderWithCustomTemplate(customTemplate)
-	if err != nil {
-		return err
-	}
-
-	// Ensure the directory exists
-	dir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	return os.WriteFile(outputPath, data, 0644)
-}
-
 // RenderToString renders the result to a string
 func (v *Values) RenderToString() (string, error) {
 	data, err := v.Render()
@@ -224,25 +208,4 @@ func (v *Values) RenderToString() (string, error) {
 		return "", err
 	}
 	return string(data), nil
-}
-
-// BuildCustomTemplate builds a complete template from template fragments
-func BuildCustomTemplate(header, body, footer string) string {
-	var buf bytes.Buffer
-
-	if header != "" {
-		buf.WriteString(header)
-		buf.WriteString("\n")
-	}
-
-	if body != "" {
-		buf.WriteString(body)
-		buf.WriteString("\n")
-	}
-
-	if footer != "" {
-		buf.WriteString(footer)
-	}
-
-	return buf.String()
 }

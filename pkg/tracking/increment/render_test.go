@@ -247,18 +247,6 @@ func TestRenderWithCustomTemplate(t *testing.T) {
 		t.Errorf("Expected rendering result %s, got %s", expected, string(result))
 	}
 }
-func TestBuildCustomTemplate(t *testing.T) {
-	header := "// Header"
-	body := "// Body"
-	footer := "// Footer"
-
-	template := BuildCustomTemplate(header, body, footer)
-
-	expected := "// Header\n// Body\n// Footer"
-	if template != expected {
-		t.Errorf("Expected template to be %s, got %s", expected, template)
-	}
-}
 func TestSave(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "render-test")
 	if err != nil {

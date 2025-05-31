@@ -35,7 +35,8 @@ Options:
   --printer-config-mode <mode>          Printer config mode, list of (none, useSpaces, tabIndent, sourcePos, rawFormat) (default: "useSpaces,tabIndent")
   --printer-config-tabwidth <tabwidth>  Printer config tabwidth (default: 8)
   --printer-config-indent <indent>      Printer config indent (default: 0)
-  --data-type <dataType>                Data type (truth, count) (default: "truth")
+  --data-type <dataType>                Data type (bool, count) (default: "bool")
+  --skip-nested-modules                 Skip directories containing go.mod files (default: true)
   --force                               Force overwrite existing goat.yaml file
 
 Examples:
@@ -52,7 +53,7 @@ Examples:
 			if _, err := os.Stat(project); os.IsNotExist(err) {
 				return fmt.Errorf("current directory not found")
 			}
-			log.Info("Initializing project")
+			log.Info("Project initializing ... ")
 			project, err := filepath.Abs(project)
 			if err != nil {
 				return fmt.Errorf("failed to get absolute path: %w", err)
@@ -87,6 +88,7 @@ Examples:
 			printerConfigTabwidth, _ := cmd.Flags().GetInt("printer-config-tabwidth")
 			printerConfigIndent, _ := cmd.Flags().GetInt("printer-config-indent")
 			dataTypeStr, _ := cmd.Flags().GetString("data-type")
+			skipNestedModules, _ := cmd.Flags().GetBool("skip-nested-modules")
 
 			// process ignore file list
 			var ignores []string
@@ -131,14 +133,13 @@ Examples:
 				PrinterConfigTabwidth: printerConfigTabwidth,
 				PrinterConfigIndent:   printerConfigIndent,
 				DataType:              dataTypeStr,
+				SkipNestedModules:     skipNestedModules,
 			}
 
 			if err := cfg.Validate(); err != nil {
 				return fmt.Errorf("failed to validate config: %w", err)
 			}
 
-			// initialize config
-			log.Infof("Initializing config: %s", filename)
 			err = config.InitWithConfig(filename, cfg)
 			if err != nil {
 				log.Fatalf("Failed to initialize project: %v", err)
@@ -146,7 +147,8 @@ Examples:
 			}
 
 			log.Info("Project initialized successfully")
-			log.Infof("You can edit '%s' to customize configurations according to your needs", filename)
+			log.Info("Suggested next steps:")
+			log.Infof("- Open and Edit: '%s' if needed", filename)
 			return nil
 		},
 	}
@@ -168,7 +170,8 @@ Examples:
 	cmd.Flags().String("printer-config-mode", "useSpaces,tabIndent", "Printer config mode, list of (none, useSpaces, tabIndent, sourcePos, rawFormat)")
 	cmd.Flags().Int("printer-config-tabwidth", 8, "Printer config tabwidth")
 	cmd.Flags().Int("printer-config-indent", 0, "Printer config indent")
-	cmd.Flags().String("data-type", "truth", "Data type (truth, count)")
+	cmd.Flags().String("data-type", "bool", "Data type (bool, count)")
+	cmd.Flags().Bool("skip-nested-modules", true, "Skip sub directories containing go.mod files")
 	cmd.Flags().Bool("force", false, "Force overwrite existing goat.yaml file")
 
 	return cmd

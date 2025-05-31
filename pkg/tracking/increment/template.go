@@ -213,15 +213,6 @@ func ServeHTTP(component Component) {
 		}
 		addr := fmt.Sprintf("%s:%s", expose, port)
 		log.Printf("Goat track service started: http://%s\n", addr)
-		// Tips how to use
-		log.Printf("Goat track all components metrics in prometheus format: http://%s/metrics\n", addr)
-		log.Printf("Goat track all components details: http://%s/track\n", addr)
-		log.Printf("Goat track component details: http://%s/track?component=COMPONENT_ID\n", addr)
-		log.Printf("Goat track components details: http://%s/track?component=COMPONENT_ID,COMPONENT_ID2\n", addr)
-		log.Printf("Goat track details order by count asc: http://%s/track?component=COMPONENT_ID&order=0\n", addr)
-		log.Printf("Goat track details order by count desc: http://%s/track?component=COMPONENT_ID&order=1\n", addr)
-		log.Printf("Goat track details order by id asc: http://%s/track?component=COMPONENT_ID&order=2\n", addr)
-		log.Printf("Goat track details order by id desc: http://%s/track?component=COMPONENT_ID&order=3\n", addr)
 		log.Fatal(http.ListenAndServe(addr, system))
 	}()
 }

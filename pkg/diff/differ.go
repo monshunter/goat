@@ -90,11 +90,14 @@ func newRepoInfo(oldBranch, newBranch string) (*repoInfo, error) {
 		return nil, fmt.Errorf("failed to get new branch commit: %w", err)
 	}
 
-	if isAncestor, err := oldCommit.IsAncestor(newCommit); err != nil {
-		return nil, fmt.Errorf("failed to check if old commit is an ancestor of new commit: %w", err)
-	} else if !isAncestor {
-		return nil, fmt.Errorf("old commit is not an ancestor of new commit")
-	}
+	// Because we have checked the newHash is the same as the current HEAD,
+	// so we don't need to check if oldCommit is an ancestor of newCommit
+	// sometimes the old commit is not an ancestor of new commit, but we still need to compare them
+	// if isAncestor, err := oldCommit.IsAncestor(newCommit); err != nil {
+	// 	return nil, fmt.Errorf("failed to check if old commit is an ancestor of new commit: %w", err)
+	// } else if !isAncestor {
+	// 	return nil, fmt.Errorf("old commit is not an ancestor of new commit")
+	// }
 
 	return &repoInfo{
 		repo:      repo,

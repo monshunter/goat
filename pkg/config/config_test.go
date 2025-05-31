@@ -177,7 +177,7 @@ func TestDataTypeString(t *testing.T) {
 		dataType DataType
 		want     string
 	}{
-		{"truth", DataTypeTruth, "truth"},
+		{"bool", DataTypeBool, "bool"},
 		{"count", DataTypeCount, "count"},
 	}
 
@@ -196,7 +196,7 @@ func TestDataTypeIsValid(t *testing.T) {
 		dataType DataType
 		want     bool
 	}{
-		{"truth", DataTypeTruth, true},
+		{"bool", DataTypeBool, true},
 		{"count", DataTypeCount, true},
 		{"invalid", DataType(0), false},
 		{"invalid high", DataType(100), false},
@@ -217,7 +217,7 @@ func TestDataTypeInt(t *testing.T) {
 		dataType DataType
 		want     int
 	}{
-		{"truth", DataTypeTruth, 1},
+		{"bool", DataTypeBool, 1},
 		{"count", DataTypeCount, 2},
 	}
 
@@ -237,9 +237,9 @@ func TestGetDataType(t *testing.T) {
 		want    DataType
 		wantErr bool
 	}{
-		{"truth", "truth", DataTypeTruth, false},
+		{"bool", "bool", DataTypeBool, false},
 		{"count", "count", DataTypeCount, false},
-		{"invalid", "invalid", DataTypeTruth, true},
+		{"invalid", "invalid", DataTypeBool, true},
 	}
 
 	for _, tt := range tests {
@@ -393,9 +393,9 @@ func TestConfigGetDataType(t *testing.T) {
 		dataType string
 		want     DataType
 	}{
-		{"truth", "truth", DataTypeTruth},
+		{"bool", "bool", DataTypeBool},
 		{"count", "count", DataTypeCount},
-		{"invalid", "invalid", DataTypeTruth}, // Default to truth for invalid
+		{"invalid", "invalid", DataTypeBool}, // Default to bool for invalid
 	}
 
 	for _, tt := range tests {

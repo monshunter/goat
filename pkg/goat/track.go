@@ -21,6 +21,7 @@ type TrackExecutor struct {
 	changes             []*diff.FileChange
 	mainPackageInfos    []maininfo.MainPackageInfo
 	trackers            []tracking.Tracker
+	replacedFiles       int
 	fileTrackIdStartMap map[string]trackIdxInterval
 	goModule            string
 }
@@ -35,47 +36,53 @@ func NewTrackExecutor(cfg *config.Config) *TrackExecutor {
 }
 
 // Run runs the track executor
-func (p *TrackExecutor) Run() error {
+func (t *TrackExecutor) Run() error {
 	log.Infof("Tracking project")
-	if err := p.initChanges(); err != nil {
+	if err := t.initChanges(); err != nil {
 		return fmt.Errorf("failed to initialize changes: %w", err)
 	}
 
-	if err := p.initMainPackageInfos(); err != nil {
+	if err := t.initMainPackageInfos(); err != nil {
 		return fmt.Errorf("failed to initialize main packages: %w", err)
 	}
 
-	if err := p.initTracks(); err != nil {
+	if err := t.initTracks(); err != nil {
 		return fmt.Errorf("failed to initialize trackers: %w", err)
 	}
 
-	count, err := p.replaceTracks()
+	count, err := t.replaceTracks()
 	if err != nil {
 		return fmt.Errorf("failed to replace tracks: %w", err)
 	}
 
 	log.Infof("Replaced %d tracking points", count)
 
-	componentTrackIdxs := getComponentTrackIdxs(p.fileTrackIdStartMap, p.mainPackageInfos)
+	componentTrackIdxs := getComponentTrackIdxs(t.fileTrackIdStartMap, t.mainPackageInfos)
 
-	values := increment.NewValues(p.cfg)
+	values := increment.NewValues(t.cfg)
 	for _, component := range componentTrackIdxs {
 		values.AddComponent(component.componentId, component.component, component.trackIdx)
 	}
 
-	values.AddTrackIds(getTotalTrackIdxs(p.fileTrackIdStartMap))
-	log.Infof("Saving generated file %s", p.cfg.GoatGeneratedFile())
-	if err = values.Save(p.cfg.GoatGeneratedFile()); err != nil {
-		return fmt.Errorf("failed to save generated file %s: %w", p.cfg.GoatGeneratedFile(), err)
+	values.AddTrackIds(getTotalTrackIdxs(t.fileTrackIdStartMap))
+
+	if values.IsEmpty() {
+		log.Infof("No tracking points found, skip saving generated file")
+		return nil
 	}
 
-	log.Infof("Saving tracking points to %d files", len(p.trackers))
-	if err := p.saveTracks(); err != nil {
+	log.Infof("Saving generated file %s", t.cfg.GoatGeneratedFile())
+	if err = values.Save(t.cfg.GoatGeneratedFile()); err != nil {
+		return fmt.Errorf("failed to save generated file %s: %w", t.cfg.GoatGeneratedFile(), err)
+	}
+
+	log.Infof("Saving tracking points to %d files", t.replacedFiles)
+	if err := t.saveTracks(); err != nil {
 		return fmt.Errorf("failed to save tracking points: %w", err)
 	}
 
 	log.Infof("Applying main entries")
-	if err := applyMainEntries(p.cfg, p.goModule, p.mainPackageInfos, componentTrackIdxs); err != nil {
+	if err := applyMainEntries(t.cfg, t.goModule, t.mainPackageInfos, componentTrackIdxs); err != nil {
 		return fmt.Errorf("failed to apply main entries: %w", err)
 	}
 
@@ -84,9 +91,9 @@ func (p *TrackExecutor) Run() error {
 }
 
 // initChanges initializes the changes
-func (p *TrackExecutor) initChanges() error {
+func (t *TrackExecutor) initChanges() error {
 	log.Infof("Getting code differences")
-	changes, err := getDiff(p.cfg)
+	changes, err := getDiff(t.cfg)
 	if err != nil {
 		return fmt.Errorf("failed to get code differences: %w", err)
 	}
@@ -100,63 +107,63 @@ func (p *TrackExecutor) initChanges() error {
 		return changes[i].Path < changes[j].Path
 	})
 
-	p.changes = changes
+	t.changes = changes
 	log.Debugf("Found %d file changes", len(changes))
 	return nil
 }
 
 // initMainPackageInfos initializes the main package infos
-func (p *TrackExecutor) initMainPackageInfos() error {
+func (t *TrackExecutor) initMainPackageInfos() error {
 	log.Infof("Getting main package infos")
-	mainPkgInfos, err := getMainPackageInfos(".", p.goModule, p.cfg.Ignores)
+	mainPkgInfos, err := getMainPackageInfosWithConfig(".", t.goModule, t.cfg.Ignores, t.cfg.SkipNestedModules)
 	if err != nil {
 		return fmt.Errorf("failed to get main package info: %w", err)
 	}
-	p.mainPackageInfos = mainPkgInfos
+	t.mainPackageInfos = mainPkgInfos
 	log.Debugf("Found %d main packages", len(mainPkgInfos))
 	return nil
 }
 
 // initTracks initializes the trackers
-func (p *TrackExecutor) initTracks() error {
+func (t *TrackExecutor) initTracks() error {
 	log.Infof("Initializing trackers")
-	if p.cfg.Threads == 1 {
-		return p.initTracksSequential()
+	if t.cfg.Threads == 1 {
+		return t.initTracksSequential()
 	}
-	return p.initTracksParallel()
+	return t.initTracksParallel()
 }
 
 // initTracksSequential initializes the trackers sequentially
-func (p *TrackExecutor) initTracksSequential() error {
-	trackers := make([]tracking.Tracker, len(p.changes))
-	for i, change := range p.changes {
-		tracker, err := p.handleDiffChange(change)
+func (t *TrackExecutor) initTracksSequential() error {
+	trackers := make([]tracking.Tracker, len(t.changes))
+	for i, change := range t.changes {
+		tracker, err := t.handleDiffChange(change)
 		if err != nil {
 			return fmt.Errorf("failed to handle file change %s: %w", change.Path, err)
 		}
 		trackers[i] = tracker
 	}
 
-	p.trackers = trackers
+	t.trackers = trackers
 	log.Debugf("Initialized %d trackers", len(trackers))
 	return nil
 }
 
 // initTracksParallel initializes the trackers in parallel
-func (p *TrackExecutor) initTracksParallel() error {
-	trackers := make([]tracking.Tracker, len(p.changes))
-	sem := make(chan struct{}, p.cfg.Threads)
-	errChan := make(chan error, len(p.changes))
+func (t *TrackExecutor) initTracksParallel() error {
+	trackers := make([]tracking.Tracker, len(t.changes))
+	sem := make(chan struct{}, t.cfg.Threads)
+	errChan := make(chan error, len(t.changes))
 	wg := sync.WaitGroup{}
-	wg.Add(len(p.changes))
-	for i, change := range p.changes {
+	wg.Add(len(t.changes))
+	for i, change := range t.changes {
 		sem <- struct{}{}
 		go func(i int, change *diff.FileChange) {
 			defer func() {
 				<-sem
 				wg.Done()
 			}()
-			tracker, err := p.handleDiffChange(change)
+			tracker, err := t.handleDiffChange(change)
 			if err != nil {
 				errChan <- fmt.Errorf("failed to handle file change %s: %w", change.Path, err)
 				return
@@ -171,17 +178,17 @@ func (p *TrackExecutor) initTracksParallel() error {
 			return err
 		}
 	}
-	p.trackers = trackers
+	t.trackers = trackers
 	log.Debugf("Initialized %d trackers", len(trackers))
 	return nil
 }
 
 // handleDiffChange handles the diff change
-func (p *TrackExecutor) handleDiffChange(change *diff.FileChange) (tracking.Tracker, error) {
-	granularity := p.cfg.GetGranularity()
+func (t *TrackExecutor) handleDiffChange(change *diff.FileChange) (tracking.Tracker, error) {
+	granularity := t.cfg.GetGranularity()
 	tracker, err := tracking.NewIncrementalTrack(".", change,
 		increment.TrackImportPathPlaceHolder, increment.GetPackageInsertStmts(),
-		granularity, p.cfg.PrinterConfig())
+		granularity, t.cfg.PrinterConfig())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create incremental tracker: %w", err)
 	}
@@ -194,63 +201,66 @@ func (p *TrackExecutor) handleDiffChange(change *diff.FileChange) (tracking.Trac
 }
 
 // replaceTracks replaces the tracks
-func (p *TrackExecutor) replaceTracks() (int, error) {
+func (t *TrackExecutor) replaceTracks() (int, error) {
 	log.Infof("Replacing tracks")
 	start := 1
-	importPath := utils.GoatPackageImportPath(p.goModule, p.cfg.GoatPackagePath)
-	for i, tracker := range p.trackers {
+	importPath := utils.GoatPackageImportPath(t.goModule, t.cfg.GoatPackagePath)
+	for i, tracker := range t.trackers {
 		count, newContent, err := utils.Replace(string(tracker.Content()), increment.TrackStmtPlaceHolder,
-			increment.IncreamentReplaceStmt(p.cfg.GoatPackageAlias, start))
+			increment.IncreamentReplaceStmt(t.cfg.GoatPackageAlias, start))
 		if err != nil || count != tracker.Count() {
 			return 0, fmt.Errorf("failed to replace statements in %s: expected=%d, actual=%d: %w",
 				tracker.Target(), tracker.Count(), count, err)
 		}
-		p.fileTrackIdStartMap[p.changes[i].Path] = trackIdxInterval{start: start, end: start + count - 1}
+		t.fileTrackIdStartMap[t.changes[i].Path] = trackIdxInterval{start: start, end: start + count - 1}
 		start += count
 		_, newContent, err = utils.Replace(newContent, fmt.Sprintf("%q", increment.TrackImportPathPlaceHolder),
-			increment.IncreamentReplaceImport(p.cfg.GoatPackageAlias, importPath))
+			increment.IncreamentReplaceImport(t.cfg.GoatPackageAlias, importPath))
 		if err != nil {
 			return 0, fmt.Errorf("failed to replace import in %s: %w", tracker.Target(), err)
 		}
 		tracker.SetContent([]byte(newContent))
+		if count > 0 {
+			t.replacedFiles++
+		}
 		log.Debugf("Replaced %d tracking points in %s", count, tracker.Target())
 	}
 	return start - 1, nil
 }
 
 // saveTracks saves the trackers
-func (p *TrackExecutor) saveTracks() error {
-	if p.cfg.Threads == 1 {
-		return p.saveTracksSequential()
+func (t *TrackExecutor) saveTracks() error {
+	if t.cfg.Threads == 1 {
+		return t.saveTracksSequential()
 	}
-	return p.saveTracksParallel()
+	return t.saveTracksParallel()
 }
 
 // saveTracksSequential saves the trackers sequentially
-func (p *TrackExecutor) saveTracksSequential() error {
-	for _, tracker := range p.trackers {
-		if err := utils.FormatAndSave(tracker.Target(), tracker.Content(), p.cfg.PrinterConfig()); err != nil {
+func (t *TrackExecutor) saveTracksSequential() error {
+	for _, tracker := range t.trackers {
+		if err := utils.FormatAndSave(tracker.Target(), tracker.Content(), t.cfg.PrinterConfig()); err != nil {
 			return fmt.Errorf("failed to save tracker for %s: %w", tracker.Target(), err)
 		}
 	}
-	log.Debugf("Saved %d tracking files", len(p.trackers))
+	log.Debugf("Saved %d tracking files", t.replacedFiles)
 	return nil
 }
 
 // saveTracksParallel saves the trackers in parallel
-func (p *TrackExecutor) saveTracksParallel() error {
+func (t *TrackExecutor) saveTracksParallel() error {
 	wg := sync.WaitGroup{}
-	wg.Add(len(p.trackers))
-	sem := make(chan struct{}, p.cfg.Threads)
-	errChan := make(chan error, len(p.trackers))
-	for _, tracker := range p.trackers {
+	wg.Add(len(t.trackers))
+	sem := make(chan struct{}, t.cfg.Threads)
+	errChan := make(chan error, len(t.trackers))
+	for _, tracker := range t.trackers {
 		sem <- struct{}{}
 		go func(tracker tracking.Tracker) {
 			defer func() {
 				<-sem
 				wg.Done()
 			}()
-			if err := utils.FormatAndSave(tracker.Target(), tracker.Content(), p.cfg.PrinterConfig()); err != nil {
+			if err := utils.FormatAndSave(tracker.Target(), tracker.Content(), t.cfg.PrinterConfig()); err != nil {
 				errChan <- fmt.Errorf("failed to save tracker for %s: %w", tracker.Target(), err)
 				return
 			}
@@ -263,6 +273,8 @@ func (p *TrackExecutor) saveTracksParallel() error {
 			return err
 		}
 	}
-	log.Debugf("Saved %d tracker files", len(p.trackers))
+	log.Debugf("Saved %d tracker files", t.replacedFiles)
 	return nil
 }
+
+// applyMainEntries applies the main entries

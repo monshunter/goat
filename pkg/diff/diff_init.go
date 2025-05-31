@@ -41,7 +41,7 @@ func (d *DifferInit) AnalyzeChanges() ([]*FileChange, error) {
 			return err
 		}
 		if info.IsDir() {
-			if !utils.IsTargetDir(path, d.cfg.Ignores) {
+			if !utils.IsTargetDir(path, d.cfg.Ignores, d.cfg.SkipNestedModules) {
 				return filepath.SkipDir
 			}
 			return nil

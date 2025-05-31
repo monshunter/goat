@@ -23,6 +23,8 @@ func TestLogLevels(t *testing.T) {
 	Infof("This is an info with %s", "format")
 	Debug("This should not be printed")
 	Debugf("This should not be printed with %s", "format")
+	Warning("This is a warning")
+	Warningf("This is a warning with %s", "format")
 	Error("This is an error")
 	Errorf("This is an error with %s", "format")
 
@@ -62,6 +64,15 @@ func TestLogLevels(t *testing.T) {
 		}
 		if strings.Contains(output, "This should not be printed with format") {
 			t.Error("Formatted debug log should not be printed when verbose is false")
+		}
+	})
+
+	t.Run("Warning logs are printed", func(t *testing.T) {
+		if !strings.Contains(output, "This is a warning") {
+			t.Error("Warning log should be printed")
+		}
+		if !strings.Contains(output, "This is a warning with format") {
+			t.Error("Formatted warning log should be printed")
 		}
 	})
 
@@ -198,6 +209,7 @@ func TestColorOutput(t *testing.T) {
 
 	// Output logs with colors
 	Info("Colored info")
+	Warning("Colored warning")
 	Error("Colored error")
 	Debug("Colored debug")
 
@@ -209,6 +221,7 @@ func TestColorOutput(t *testing.T) {
 
 	// Output logs without colors
 	Info("Non-colored info")
+	Warning("Non-colored warning")
 	Error("Non-colored error")
 	Debug("Non-colored debug")
 
@@ -234,6 +247,10 @@ func TestColorOutput(t *testing.T) {
 		t.Error("Cyan color code not found in colored output")
 	}
 
+	if !strings.Contains(output, ColorYellow) {
+		t.Error("Yellow color code not found in colored output")
+	}
+
 	if !strings.Contains(output, ColorReset) {
 		t.Error("Color reset code not found in colored output")
 	}
@@ -249,6 +266,7 @@ func TestColorOutput(t *testing.T) {
 	outputAfterDisable := output[nonColoredPos:]
 	if strings.Contains(outputAfterDisable, ColorGreen) ||
 		strings.Contains(outputAfterDisable, ColorRed) ||
+		strings.Contains(outputAfterDisable, ColorYellow) ||
 		strings.Contains(outputAfterDisable, ColorReset) {
 		t.Error("Color codes found after disabling colors")
 	}

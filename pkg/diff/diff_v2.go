@@ -61,7 +61,7 @@ func (d *DifferV2) analyzeChange(filePatch diff.FilePatch) *FileChange {
 	if (from == nil && to == nil) || (from != nil && to == nil) {
 		return nil
 	}
-	if !utils.IsTargetFile(to.Path(), d.cfg.Ignores) {
+	if !utils.IsTargetFile(to.Path(), d.cfg.Ignores, d.cfg.SkipNestedModules) {
 		return nil
 	}
 	lineChanges := getLineChange(filePatch)

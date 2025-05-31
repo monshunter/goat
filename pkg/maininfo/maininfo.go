@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/monshunter/goat/pkg/log"
 	"github.com/monshunter/goat/pkg/utils"
 )
 
@@ -67,11 +68,16 @@ type MainInfo struct {
 
 // NewMainInfo creates a new MainInfo instance
 func NewMainInfo(projectRoot string, goModule string, ignores []string) (*MainInfo, error) {
+	return NewMainInfoWithConfig(projectRoot, goModule, ignores, true) // default to skipping nested modules
+}
+
+// NewMainInfoWithConfig creates a new MainInfo instance with configuration
+func NewMainInfoWithConfig(projectRoot string, goModule string, ignores []string, skipNestedModules bool) (*MainInfo, error) {
 	mainInfo := &MainInfo{
 		ProjectRoot: projectRoot,
 		Module:      goModule,
 	}
-	mainPackageInfos, err := mainInfo.analyzeMainPackages(ignores)
+	mainPackageInfos, err := mainInfo.analyzeMainPackages(ignores, skipNestedModules)
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +90,8 @@ func NewMainInfo(projectRoot string, goModule string, ignores []string) (*MainIn
 	return mainInfo, nil
 }
 
-// analyzeMainPackages analyzes all main packages
-func (m *MainInfo) analyzeMainPackages(ignores []string) ([]MainPackageInfo, error) {
+// analyzeMainPackagesWithConfig analyzes all main packages with configuration
+func (m *MainInfo) analyzeMainPackages(ignores []string, skipNestedModules bool) ([]MainPackageInfo, error) {
 	// find all Go files
 	var goFiles []string
 	err := filepath.Walk(m.ProjectRoot, func(path string, info os.FileInfo, err error) error {
@@ -93,13 +99,17 @@ func (m *MainInfo) analyzeMainPackages(ignores []string) ([]MainPackageInfo, err
 			return err
 		}
 		if info.IsDir() {
-			if !utils.IsTargetDir(path, ignores) {
+			if !utils.IsTargetDir(path, ignores, skipNestedModules) {
+				// Log when skipping nested modules for user awareness
+				if skipNestedModules && path != "." && utils.IsBelongtoNestedGoModule(path) {
+					log.Warningf("Skipping nested module directory: %s", path)
+				}
 				return filepath.SkipDir
 			}
 			return nil
 		}
 
-		if !utils.IsTargetFile(path, ignores) {
+		if !utils.IsTargetFile(path, ignores, skipNestedModules) {
 			return nil
 		}
 		goFiles = append(goFiles, path)

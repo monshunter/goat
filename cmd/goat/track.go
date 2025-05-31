@@ -50,7 +50,7 @@ Examples:
 			// Show success message and next steps
 			log.Info("----------------------------------------------------------")
 			log.Info("✅ Track completed successfully!")
-			log.Info("You can:")
+			log.Info("Suggested next steps:")
 			log.Info("- Review the changes using git diff or your preferred diff tool")
 			log.Info("- Build and test your application to verify instrumentation")
 			log.Info("- If you manually add or remove instrumentation, run 'goat patch' to update the instrumentation")

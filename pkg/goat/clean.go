@@ -30,13 +30,13 @@ func NewCleanExecutor(cfg *config.Config) *CleanExecutor {
 }
 
 // Run runs the clean executor
-func (e *CleanExecutor) Run() error {
+func (c *CleanExecutor) Run() error {
 	log.Infof("Cleaning project")
-	if err := e.prepare(); err != nil {
+	if err := c.prepare(); err != nil {
 		log.Errorf("Failed to prepare: %v", err)
 		return err
 	}
-	if err := e.clean(); err != nil {
+	if err := c.clean(); err != nil {
 		log.Errorf("Failed to clean: %v", err)
 		return err
 	}
@@ -45,40 +45,40 @@ func (e *CleanExecutor) Run() error {
 }
 
 // prepare prepares the files
-func (e *CleanExecutor) prepare() error {
+func (c *CleanExecutor) prepare() error {
 	log.Infof("Preparing files")
 	var err error
-	files, err := prepareFiles(e.cfg)
+	files, err := prepareFiles(c.cfg)
 	if err != nil {
 		log.Errorf("Failed to prepare files: %v", err)
 		return err
 	}
-	if err := e.prepareContents(files); err != nil {
+	if err := c.prepareContents(files); err != nil {
 		log.Errorf("Failed to prepare contents: %v", err)
 		return err
 	}
-	log.Infof("Prepared %d files", len(e.files))
+	log.Infof("Prepared %d files", len(c.files))
 	return nil
 }
 
 // prepareContents prepares the contents of the files
-func (e *CleanExecutor) prepareContents(files []string) error {
-	if e.cfg.Threads == 1 {
-		return e.prepareContentsSequential(files)
+func (c *CleanExecutor) prepareContents(files []string) error {
+	if c.cfg.Threads == 1 {
+		return c.prepareContentsSequential(files)
 	}
-	return e.prepareContentsParallel(files)
+	return c.prepareContentsParallel(files)
 }
 
 // prepareContentsSequential prepares the contents of the files sequentially
-func (e *CleanExecutor) prepareContentsSequential(files []string) error {
+func (c *CleanExecutor) prepareContentsSequential(files []string) error {
 	for _, file := range files {
-		content, changed, err := e.prepareContent(file)
+		content, changed, err := c.prepareContent(file)
 		if err != nil {
 			log.Errorf("Failed to prepare content: %v", err)
 			return err
 		}
 		if changed {
-			e.files = append(e.files, goatFile{
+			c.files = append(c.files, goatFile{
 				filename: file,
 				content:  content,
 			})
@@ -91,7 +91,7 @@ func (e *CleanExecutor) prepareContentsSequential(files []string) error {
 // prepareContentsParallel is the parallel version of prepareContents
 // It processes files concurrently using a worker pool pattern to limit goroutine count
 // Algorithm:
-// 1. Uses a semaphore channel to limit concurrent goroutines (e.g. e.cfg.Threads)
+// 1. Uses a semaphore channel to limit concurrent goroutines (c.g. c.cfg.Threads)
 // 2. Each worker processes a file and:
 //   - Reads and processes file content (prepareContent)
 //   - Stores result in thread-safe slice (goatFiles)
@@ -109,12 +109,12 @@ func (e *CleanExecutor) prepareContentsSequential(files []string) error {
 // 2. Could use sync.Pool for temporary buffers
 // 3. Could implement work stealing for better load balancing
 // 4. Could add context cancellation support
-func (e *CleanExecutor) prepareContentsParallel(files []string) error {
+func (c *CleanExecutor) prepareContentsParallel(files []string) error {
 	var wg sync.WaitGroup
 	count := len(files)
 	wg.Add(count)
 
-	sem := make(chan struct{}, e.cfg.Threads)
+	sem := make(chan struct{}, c.cfg.Threads)
 	errChan := make(chan error, count)
 
 	// We'll collect potential files here first
@@ -129,7 +129,7 @@ func (e *CleanExecutor) prepareContentsParallel(files []string) error {
 				wg.Done()
 			}()
 
-			content, changed, err := e.prepareContent(file)
+			content, changed, err := c.prepareContent(file)
 			if err != nil {
 				log.Errorf("Failed to prepare content: %v", err)
 				errChan <- err
@@ -163,13 +163,13 @@ func (e *CleanExecutor) prepareContentsParallel(files []string) error {
 
 	// Collect results (only changed files)
 	for file := range goatFilesChan {
-		e.files = append(e.files, file)
+		c.files = append(c.files, file)
 	}
 
 	return nil
 }
 
-func (e *CleanExecutor) prepareContent(filename string) (string, bool, error) {
+func (c *CleanExecutor) prepareContent(filename string) (string, bool, error) {
 	log.Debugf("Preparing content for file: %s", filename)
 	contentBytes, err := os.ReadFile(filename)
 	if err != nil {
@@ -235,7 +235,7 @@ func (e *CleanExecutor) prepareContent(filename string) (string, bool, error) {
 	if changed {
 		// remove import
 		log.Debugf("Deleting import for file: %s", filename)
-		bytes, err := utils.DeleteImport(e.cfg.PrinterConfig(), e.goatImportPath, e.goatPackageAlias, "", []byte(newContent))
+		bytes, err := utils.DeleteImport(c.cfg.PrinterConfig(), c.goatImportPath, c.goatPackageAlias, "", []byte(newContent))
 		if err != nil {
 			log.Errorf("Failed to delete import: %v", err)
 			return "", false, err
@@ -247,45 +247,45 @@ func (e *CleanExecutor) prepareContent(filename string) (string, bool, error) {
 }
 
 // clean cleans the contents of the files
-func (e *CleanExecutor) clean() error {
+func (c *CleanExecutor) clean() error {
 	log.Infof("Cleaning contents")
 	var err error
-	if e.cfg.Threads == 1 {
-		err = e.cleanContentsSequential()
+	if c.cfg.Threads == 1 {
+		err = c.cleanContentsSequential()
 	} else {
-		err = e.cleanContentsParallel()
+		err = c.cleanContentsParallel()
 	}
 	if err != nil {
 		log.Errorf("Failed to clean contents: %v", err)
 		return err
 	}
 
-	log.Infof("Total cleaned files: %d", len(e.files))
-	log.Debugf("Removing goat generated file: %s", e.cfg.GoatGeneratedFile())
-	os.Remove(e.cfg.GoatGeneratedFile())
+	log.Infof("Total cleaned files: %d", len(c.files))
+	log.Debugf("Removing goat generated file: %s", c.cfg.GoatGeneratedFile())
+	os.Remove(c.cfg.GoatGeneratedFile())
 	// remove goat package if empty
-	log.Debugf("Checking if goat package is empty: %s", e.cfg.GoatPackagePath)
-	empty, err := utils.IsDirEmpty(e.cfg.GoatPackagePath)
+	log.Debugf("Checking if goat package is empty: %s", c.cfg.GoatPackagePath)
+	empty, err := utils.IsDirEmpty(c.cfg.GoatPackagePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Debugf("Goat package does not exist: %s", e.cfg.GoatPackagePath)
+			log.Debugf("Goat package does not exist: %s", c.cfg.GoatPackagePath)
 			return nil
 		}
 		log.Errorf("Failed to check if goat package is empty: %v", err)
 		return err
 	}
 	if empty {
-		log.Debugf("Removing goat package: %s", e.cfg.GoatPackagePath)
-		os.RemoveAll(e.cfg.GoatPackagePath)
+		log.Debugf("Removing goat package: %s", c.cfg.GoatPackagePath)
+		os.RemoveAll(c.cfg.GoatPackagePath)
 	}
 	return nil
 }
 
 // cleanContentsSequential cleans the contents of the files sequentially
-func (e *CleanExecutor) cleanContentsSequential() error {
-	for _, file := range e.files {
+func (c *CleanExecutor) cleanContentsSequential() error {
+	for _, file := range c.files {
 		log.Debugf("Cleaning file: %s", file.filename)
-		err := utils.FormatAndSave(file.filename, []byte(file.content), e.cfg.PrinterConfig())
+		err := utils.FormatAndSave(file.filename, []byte(file.content), c.cfg.PrinterConfig())
 		if err != nil {
 			log.Errorf("Failed to format and save file: %v", err)
 			return err
@@ -298,7 +298,7 @@ func (e *CleanExecutor) cleanContentsSequential() error {
 // cleanContentsParallel is the parallel version of cleanContentsSequential
 // It processes files concurrently using a worker pool pattern to limit goroutine count
 // Algorithm:
-// 1. Uses a semaphore channel to limit concurrent goroutines (e.g. e.cfg.Threads)
+// 1. Uses a semaphore channel to limit concurrent goroutines (c.g. c.cfg.Threads)
 // 2. Each worker:
 //   - Reads file stats (permissions)
 //   - Writes cleaned content with original permissions
@@ -317,13 +317,13 @@ func (e *CleanExecutor) cleanContentsSequential() error {
 // 3. Could implement work stealing for better load balancing
 // 4. Could add context cancellation support
 // 5. Could pre-allocate error channel capacity
-func (e *CleanExecutor) cleanContentsParallel() error {
+func (c *CleanExecutor) cleanContentsParallel() error {
 	var wg sync.WaitGroup
-	count := len(e.files)
+	count := len(c.files)
 	wg.Add(count)
-	sem := make(chan struct{}, e.cfg.Threads)
+	sem := make(chan struct{}, c.cfg.Threads)
 	errChan := make(chan error, count)
-	for _, file := range e.files {
+	for _, file := range c.files {
 		sem <- struct{}{}
 		go func(file goatFile) {
 			defer func() {
@@ -331,7 +331,7 @@ func (e *CleanExecutor) cleanContentsParallel() error {
 				wg.Done()
 			}()
 			log.Debugf("Cleaning file: %s", file.filename)
-			err := utils.FormatAndSave(file.filename, []byte(file.content), e.cfg.PrinterConfig())
+			err := utils.FormatAndSave(file.filename, []byte(file.content), c.cfg.PrinterConfig())
 			if err != nil {
 				log.Errorf("Failed to format and save file: %v", err)
 				errChan <- err

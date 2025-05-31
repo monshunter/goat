@@ -41,3 +41,4 @@ logs/
 
 # Project specific files
 # More specific ignore items may be added as needed
+/debug

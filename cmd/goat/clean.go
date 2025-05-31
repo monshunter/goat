@@ -42,10 +42,9 @@ Examples:
 			log.Info("----------------------------------------------------------")
 			log.Info("✅ Clean completed successfully!")
 			log.Info("All instrumentation code has been removed from your project.")
-			log.Info("You can:")
+			log.Info("Suggested next steps:")
 			log.Info("- Review the changes using git diff or your preferred diff tool")
 			log.Info("- Build and test your application to verify clean up")
-			log.Info("- If you want to reapply instrumentation, run 'goat patch'")
 			log.Info("----------------------------------------------------------")
 
 			return nil

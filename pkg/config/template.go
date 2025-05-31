@@ -96,10 +96,16 @@ printerConfigTabwidth: {{.PrinterConfigTabwidth}}
 ## Indentation level for printer configuration (default: 0)
 printerConfigIndent: {{.PrinterConfigIndent}}
 
-## Data type for tracking (default: truth)
-## Options: truth, count
+## Data type for tracking (default: bool)
+## Options: bool, count
 dataType: {{.DataType}}
 
 ## Enable verbose output (default: false)
 verbose: {{.Verbose}}
+
+## Skip sub directories containing go.mod files (default: true)
+## When true, sub directories containing go.mod files are skipped during analysis
+## This prevents issues with nested Go modules that have independent dependencies
+## Set to false only if you need to track nested modules (not recommended)
+skipNestedModules: {{.SkipNestedModules}}
 `

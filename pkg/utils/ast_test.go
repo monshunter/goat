@@ -484,7 +484,7 @@ func TestIsTargetFile(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := IsTargetFile(tc.fileName, tc.excludes)
+			got := IsTargetFile(tc.fileName, tc.excludes, true)
 			if got != tc.want {
 				t.Errorf("IsTargetFile(%q, %v) = %v, want %v", tc.fileName, tc.excludes, got, tc.want)
 			}
@@ -539,7 +539,7 @@ func TestIsTargetDir(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := IsTargetDir(tc.dir, tc.excludes)
+			got := IsTargetDir(tc.dir, tc.excludes, true)
 			if got != tc.want {
 				t.Errorf("IsTargetDir(%q, %v) = %v, want %v", tc.dir, tc.excludes, got, tc.want)
 			}
@@ -899,4 +899,130 @@ func TestFormatAndSave(t *testing.T) {
 			t.Errorf("expected error but got nil")
 		}
 	})
+}
+
+func TestIsBelongtoNestedGoModule(t *testing.T) {
+	// Save current working directory
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	// Create a temporary directory for testing and change to it
+	tempDir := t.TempDir()
+	err = os.Chdir(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+	defer func() {
+		// Restore original working directory
+		os.Chdir(originalWd)
+	}()
+
+	// Create project structure:
+	// tempDir/ (project root)
+	// ├── go.mod (main project)
+	// ├── subproject/
+	// │   ├── go.mod (nested module)
+	// │   └── src/
+	// │       └── subdir/
+	// └── normal/
+	//     └── subdir/
+
+	// Create main go.mod in project root
+	err = os.WriteFile("go.mod", []byte("module main\n"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create main go.mod: %v", err)
+	}
+
+	// Create nested module structure
+	subprojectDir := "subproject"
+	err = os.MkdirAll(subprojectDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create subproject directory: %v", err)
+	}
+
+	// Create go.mod in subproject
+	subprojectGoMod := filepath.Join(subprojectDir, "go.mod")
+	err = os.WriteFile(subprojectGoMod, []byte("module subproject\n"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create subproject go.mod: %v", err)
+	}
+
+	// Create subdirectories within the nested module
+	nestedSrcDir := filepath.Join(subprojectDir, "src")
+	err = os.MkdirAll(nestedSrcDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create nested src directory: %v", err)
+	}
+
+	nestedSubDir := filepath.Join(subprojectDir, "src", "subdir")
+	err = os.MkdirAll(nestedSubDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create nested subdir: %v", err)
+	}
+
+	// Create normal directory structure (no nested go.mod)
+	normalDir := "normal"
+	err = os.MkdirAll(normalDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create normal directory: %v", err)
+	}
+
+	normalSubDir := filepath.Join(normalDir, "subdir")
+	err = os.MkdirAll(normalSubDir, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create normal subdir: %v", err)
+	}
+
+	testCases := []struct {
+		name string
+		dir  string
+		want bool
+	}{
+		{
+			name: "directory with go.mod directly",
+			dir:  subprojectDir,
+			want: true,
+		},
+		{
+			name: "subdirectory of nested module",
+			dir:  nestedSrcDir,
+			want: true,
+		},
+		{
+			name: "deep subdirectory of nested module",
+			dir:  nestedSubDir,
+			want: true,
+		},
+		{
+			name: "directory without nested go.mod",
+			dir:  normalDir,
+			want: false,
+		},
+		{
+			name: "subdirectory without nested go.mod",
+			dir:  normalSubDir,
+			want: false,
+		},
+		{
+			name: "project root (should not be considered nested)",
+			dir:  ".",
+			want: false,
+		},
+		{
+			name: "non-existent directory",
+			dir:  "nonexistent",
+			want: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := IsBelongtoNestedGoModule(tc.dir)
+			if got != tc.want {
+				t.Errorf("IsBelongtoNestedGoModule(%s) = %v, want %v", tc.dir, got, tc.want)
+			}
+		})
+	}
 }

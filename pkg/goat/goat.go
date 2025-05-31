@@ -1,7 +1,6 @@
 package goat
 
 import (
-	"encoding/json"
 	"fmt"
 	"go/printer"
 	"os"
@@ -16,26 +15,6 @@ import (
 	"github.com/monshunter/goat/pkg/tracking/increment"
 	"github.com/monshunter/goat/pkg/utils"
 )
-
-// debugChanges debugs the changes
-func debugChanges(changes []*diff.FileChange) {
-	result, err := json.MarshalIndent(changes, "", "  ")
-	if err != nil {
-		log.Errorf("Failed to marshal changes: %v", err)
-		return
-	}
-	log.Infof("Changes: %s", string(result))
-}
-
-// debugMainInfo debugs the main info
-func debugMainInfo(mainPkgInfo *maininfo.MainInfo) {
-	result, err := json.MarshalIndent(mainPkgInfo, "", "  ")
-	if err != nil {
-		log.Errorf("Failed to marshal main info: %v", err)
-		return
-	}
-	log.Infof("Main info: %s", string(result))
-}
 
 // getDiff gets the diff
 func getDiff(cfg *config.Config) ([]*diff.FileChange, error) {
@@ -83,14 +62,6 @@ type componentTrackIdx struct {
 type goatFile struct {
 	filename string
 	content  string
-}
-
-// debugComponentTrackIdxs debugs the component track idxs
-func debugComponentTrackIdxs(componentTrackIdxs []componentTrackIdx) {
-	for _, component := range componentTrackIdxs {
-		log.Infof("Component: %d, %s, %d, %v\n",
-			component.componentId, component.component, len(component.trackIdx), component.trackIdx)
-	}
 }
 
 // getComponentTrackIdxs gets the component track idxs
@@ -159,7 +130,12 @@ func getTotalTrackIdxs(fileTrackIdStartMap map[string]trackIdxInterval) []int {
 
 // getMainPackageInfos gets the main package infos
 func getMainPackageInfos(projectRoot string, goModule string, ignores []string) ([]maininfo.MainPackageInfo, error) {
-	mainPkgInfo, err := maininfo.NewMainInfo(projectRoot, goModule, ignores)
+	return getMainPackageInfosWithConfig(projectRoot, goModule, ignores, true) // default to skipping nested modules
+}
+
+// getMainPackageInfosWithConfig gets the main package infos with configuration
+func getMainPackageInfosWithConfig(projectRoot string, goModule string, ignores []string, skipNestedModules bool) ([]maininfo.MainPackageInfo, error) {
+	mainPkgInfo, err := maininfo.NewMainInfoWithConfig(projectRoot, goModule, ignores, skipNestedModules)
 	if err != nil {
 		log.Errorf("Failed to get main info: %v", err)
 		return nil, err
@@ -284,7 +260,11 @@ func prepareFiles(cfg *config.Config) (files []string, err error) {
 			return err
 		}
 		if info.IsDir() {
-			if !utils.IsTargetDir(path, cfg.Ignores) {
+			if !utils.IsTargetDir(path, cfg.Ignores, cfg.SkipNestedModules) {
+				// Log when skipping nested modules for user awareness
+				if cfg.SkipNestedModules && path != "." && utils.IsBelongtoNestedGoModule(path) {
+					log.Warningf("Skipping nested module directory: %s", path)
+				}
 				return filepath.SkipDir
 			}
 			return nil

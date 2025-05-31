@@ -100,7 +100,7 @@ func (d *DifferV1) analyzeChange(change *object.Change) (*FileChange, error) {
 // handleInsert handles insert or modify operations
 func (d *DifferV1) handleInsert(change *object.Change) (*FileChange, error) {
 	fileName := change.To.Name
-	if !utils.IsTargetFile(fileName, d.cfg.Ignores) {
+	if !utils.IsTargetFile(fileName, d.cfg.Ignores, d.cfg.SkipNestedModules) {
 		return nil, nil
 	}
 	fc := FileChange{

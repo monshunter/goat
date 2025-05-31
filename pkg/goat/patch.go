@@ -41,22 +41,22 @@ func NewPatchExecutor(cfg *config.Config) *PatchExecutor {
 	return PatchExecutor
 }
 
-func (f *PatchExecutor) Run() error {
+func (p *PatchExecutor) Run() error {
 	log.Infof("Patching project")
-	if err := f.initMainPackageInfos(); err != nil {
+	if err := p.initMainPackageInfos(); err != nil {
 		log.Errorf("Failed to init main package infos: %v", err)
 		return err
 	}
-	if err := f.prepare(); err != nil {
+	if err := p.prepare(); err != nil {
 		log.Errorf("Failed to prepare: %v", err)
 		return err
 	}
 
-	if !f.changed {
+	if !p.changed {
 		log.Infof("No files with +goat:delete, +goat:insert found, no need to apply")
 		return nil
 	}
-	if err := f.apply(); err != nil {
+	if err := p.apply(); err != nil {
 		log.Errorf("Failed to apply patch: %v", err)
 		return err
 	}
@@ -65,48 +65,48 @@ func (f *PatchExecutor) Run() error {
 }
 
 // initMainPackageInfos initializes the main package infos
-func (f *PatchExecutor) initMainPackageInfos() error {
+func (p *PatchExecutor) initMainPackageInfos() error {
 	log.Infof("Getting main package infos")
-	mainPkgInfos, err := getMainPackageInfos(".", f.goModule, f.cfg.Ignores)
+	mainPkgInfos, err := getMainPackageInfosWithConfig(".", p.goModule, p.cfg.Ignores, p.cfg.SkipNestedModules)
 	if err != nil {
 		return err
 	}
-	f.mainPackageInfos = mainPkgInfos
+	p.mainPackageInfos = mainPkgInfos
 	return nil
 }
 
-func (f *PatchExecutor) prepare() error {
+func (p *PatchExecutor) prepare() error {
 	log.Infof("Preparing files")
-	files, err := prepareFiles(f.cfg)
+	files, err := prepareFiles(p.cfg)
 	if err != nil {
 		log.Errorf("Failed to prepare files: %v", err)
 		return err
 	}
-	goatFiles, err := f.prepareContents(files)
+	goatFiles, err := p.prepareContents(files)
 	if err != nil {
 		log.Errorf("Failed to prepare contents: %v", err)
 		return err
 	}
-	f.filesContents = make(map[string]string, len(goatFiles))
+	p.filesContents = make(map[string]string, len(goatFiles))
 	for _, goatFile := range goatFiles {
-		f.filesContents[goatFile.filename] = goatFile.content
+		p.filesContents[goatFile.filename] = goatFile.content
 	}
 	return nil
 }
 
 // prepareContents prepares the contents of the files
-func (f *PatchExecutor) prepareContents(files []string) ([]goatFile, error) {
-	if f.cfg.Threads == 1 {
-		return f.prepareContentsSequential(files)
+func (p *PatchExecutor) prepareContents(files []string) ([]goatFile, error) {
+	if p.cfg.Threads == 1 {
+		return p.prepareContentsSequential(files)
 	}
-	return f.prepareContentsParallel(files)
+	return p.prepareContentsParallel(files)
 }
 
 // prepareContentsSequential prepares the contents of the files sequentially
-func (f *PatchExecutor) prepareContentsSequential(files []string) ([]goatFile, error) {
+func (p *PatchExecutor) prepareContentsSequential(files []string) ([]goatFile, error) {
 	goatFiles := make([]goatFile, 0, len(files))
 	for _, file := range files {
-		goatFile, err := f.prepareContent(file)
+		goatFile, err := p.prepareContent(file)
 		if err != nil {
 			log.Errorf("Failed to prepare content: %v", err)
 			return nil, err
@@ -120,10 +120,10 @@ func (f *PatchExecutor) prepareContentsSequential(files []string) ([]goatFile, e
 }
 
 // prepareContentsParallel prepares the contents of the files in parallel
-func (f *PatchExecutor) prepareContentsParallel(files []string) ([]goatFile, error) {
+func (p *PatchExecutor) prepareContentsParallel(files []string) ([]goatFile, error) {
 	goatFiles := make([]goatFile, 0, len(files))
 	wg := sync.WaitGroup{}
-	sem := make(chan struct{}, f.cfg.Threads)
+	sem := make(chan struct{}, p.cfg.Threads)
 	errChan := make(chan error, len(files))
 	fileChan := make(chan goatFile, len(files))
 	wg.Add(len(files))
@@ -134,7 +134,7 @@ func (f *PatchExecutor) prepareContentsParallel(files []string) ([]goatFile, err
 				<-sem
 				wg.Done()
 			}()
-			goatFile, err := f.prepareContent(file)
+			goatFile, err := p.prepareContent(file)
 			if err != nil {
 				log.Errorf("Failed to prepare content: %v", err)
 				errChan <- err
@@ -161,7 +161,7 @@ func (f *PatchExecutor) prepareContentsParallel(files []string) ([]goatFile, err
 }
 
 // prepareContent prepares the content of the file
-func (f *PatchExecutor) prepareContent(file string) (goatFile, error) {
+func (p *PatchExecutor) prepareContent(file string) (goatFile, error) {
 	var content string
 	contentBytes, err := os.ReadFile(file)
 	if err != nil {
@@ -171,21 +171,21 @@ func (f *PatchExecutor) prepareContent(file string) (goatFile, error) {
 	updated := false
 	count := 0
 	// handle // + goat:delete
-	count, content, err = handleGoatDelete(f.cfg.PrinterConfig(), string(contentBytes), f.goatImportPath, f.goatPackageAlias)
+	count, content, err = handleGoatDelete(p.cfg.PrinterConfig(), string(contentBytes), p.goatImportPath, p.goatPackageAlias)
 	if err != nil {
 		log.Errorf("Failed to handle goat delete: %v", err)
 		return goatFile{}, err
 	}
 	updated = updated || count > 0
-	f.changed = f.changed || updated
+	p.changed = p.changed || updated
 	// handle // + goat:insert
-	count, content, err = handleGoatInsert(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
+	count, content, err = handleGoatInsert(p.cfg.PrinterConfig(), content, p.goatImportPath, p.goatPackageAlias)
 	if err != nil {
 		log.Errorf("Failed to handle goat insert: %v", err)
 		return goatFile{}, err
 	}
 	updated = updated || count > 0
-	f.changed = f.changed || updated
+	p.changed = p.changed || updated
 	// handle // + goat:generate
 	count, content, err = resetGoatGenerate(content)
 	if err != nil {
@@ -195,14 +195,14 @@ func (f *PatchExecutor) prepareContent(file string) (goatFile, error) {
 	updated = updated || count > 0
 	// handle // + goat:main
 	isMainEntry := false
-	for _, mainPkgInfo := range f.mainPackageInfos {
+	for _, mainPkgInfo := range p.mainPackageInfos {
 		if mainPkgInfo.MainFile == file {
 			isMainEntry = true
 			break
 		}
 	}
 	if isMainEntry {
-		count, content, err = resetGoatMain(f.cfg.PrinterConfig(), content, f.goatImportPath, f.goatPackageAlias)
+		count, content, err = resetGoatMain(p.cfg.PrinterConfig(), content, p.goatImportPath, p.goatPackageAlias)
 		if err != nil {
 			log.Errorf("Failed to reset goat main entry: %v", err)
 			return goatFile{}, err
@@ -220,61 +220,61 @@ func (f *PatchExecutor) prepareContent(file string) (goatFile, error) {
 }
 
 // replaceTracks replaces the tracks in the files
-func (f *PatchExecutor) replaceTracks() (int, error) {
+func (p *PatchExecutor) replaceTracks() (int, error) {
 	start := 1
-	importPath := utils.GoatPackageImportPath(f.goModule, f.cfg.GoatPackagePath)
+	importPath := utils.GoatPackageImportPath(p.goModule, p.cfg.GoatPackagePath)
 	files := make([]string, 0)
-	for file := range f.filesContents {
+	for file := range p.filesContents {
 		files = append(files, file)
 	}
 	slices.Sort(files)
 	for _, file := range files {
-		content := f.filesContents[file]
+		content := p.filesContents[file]
 		count, newContent, err := utils.Replace(content, increment.TrackStmtPlaceHolder,
-			increment.IncreamentReplaceStmt(f.cfg.GoatPackageAlias, start))
+			increment.IncreamentReplaceStmt(p.cfg.GoatPackageAlias, start))
 		if err != nil {
 			log.Errorf("Failed to replace track stmt: %v", err)
 			return 0, err
 		}
-		f.fileTrackIdStartMap[file] = trackIdxInterval{start: start, end: start + count - 1}
+		p.fileTrackIdStartMap[file] = trackIdxInterval{start: start, end: start + count - 1}
 		start += count
 		_, newContent, err = utils.Replace(newContent, fmt.Sprintf("%q", increment.TrackImportPathPlaceHolder),
-			increment.IncreamentReplaceImport(f.cfg.GoatPackageAlias, importPath))
+			increment.IncreamentReplaceImport(p.cfg.GoatPackageAlias, importPath))
 		if err != nil {
 			log.Errorf("Failed to replace track import: %v", err)
 			return 0, err
 		}
-		f.filesContents[file] = newContent
+		p.filesContents[file] = newContent
 	}
 	return start - 1, nil
 }
 
 // apply applies the patch
-func (f *PatchExecutor) apply() error {
+func (p *PatchExecutor) apply() error {
 	log.Infof("Applying patch")
-	count, err := f.replaceTracks()
+	count, err := p.replaceTracks()
 	if err != nil {
 		log.Errorf("Failed to replace tracks: %v", err)
 		return err
 	}
 	log.Infof("Total replaced tracks: %d", count)
 
-	err = f.applyTracks()
+	err = p.applyTracks()
 	if err != nil {
 		log.Errorf("Failed to apply tracks: %v", err)
 		return err
 	}
 
 	// apply goat_generated.go
-	componentTrackIdxs := getComponentTrackIdxs(f.fileTrackIdStartMap, f.mainPackageInfos)
-	values := increment.NewValues(f.cfg)
+	componentTrackIdxs := getComponentTrackIdxs(p.fileTrackIdStartMap, p.mainPackageInfos)
+	values := increment.NewValues(p.cfg)
 	for _, component := range componentTrackIdxs {
 		values.AddComponent(component.componentId, component.component, component.trackIdx)
 	}
-	trackIdxs := getTotalTrackIdxs(f.fileTrackIdStartMap)
+	trackIdxs := getTotalTrackIdxs(p.fileTrackIdStartMap)
 	// remove goat_generated.go if no track idxs
 	if len(trackIdxs) == 0 {
-		err = values.Remove(f.cfg.GoatGeneratedFile())
+		err = values.Remove(p.cfg.GoatGeneratedFile())
 		if err != nil {
 			log.Errorf("Failed to remove goat_generated.go: %v", err)
 			return err
@@ -283,14 +283,21 @@ func (f *PatchExecutor) apply() error {
 	}
 
 	values.AddTrackIds(trackIdxs)
-	err = values.Save(f.cfg.GoatGeneratedFile())
+
+	if values.IsEmpty() {
+		log.Infof("No tracking points found, skip saving generated file")
+		return nil
+	}
+
+	log.Infof("Saving generated file %s", p.cfg.GoatGeneratedFile())
+	err = values.Save(p.cfg.GoatGeneratedFile())
 	if err != nil {
 		log.Errorf("Failed to save goat_generated.go: %v", err)
 		return err
 	}
 
 	// apply main entry
-	if err := applyMainEntries(f.cfg, f.goModule, f.mainPackageInfos, componentTrackIdxs); err != nil {
+	if err := applyMainEntries(p.cfg, p.goModule, p.mainPackageInfos, componentTrackIdxs); err != nil {
 		log.Errorf("Failed to apply main entries: %v", err)
 		return err
 	}
@@ -298,17 +305,17 @@ func (f *PatchExecutor) apply() error {
 }
 
 // applyTracks applies the tracks
-func (f *PatchExecutor) applyTracks() error {
-	if f.cfg.Threads == 1 {
-		return f.applyTracksSequential()
+func (p *PatchExecutor) applyTracks() error {
+	if p.cfg.Threads == 1 {
+		return p.applyTracksSequential()
 	}
-	return f.applyTracksParallel()
+	return p.applyTracksParallel()
 }
 
 // applyTracksSequential applies the tracks sequentially
-func (f *PatchExecutor) applyTracksSequential() error {
-	for file, content := range f.filesContents {
-		err := utils.FormatAndSave(file, []byte(content), f.cfg.PrinterConfig())
+func (p *PatchExecutor) applyTracksSequential() error {
+	for file, content := range p.filesContents {
+		err := utils.FormatAndSave(file, []byte(content), p.cfg.PrinterConfig())
 		if err != nil {
 			log.Errorf("Failed to format and save file: %v", err)
 			return err
@@ -318,19 +325,19 @@ func (f *PatchExecutor) applyTracksSequential() error {
 }
 
 // applyTracksParallel applies the tracks in parallel
-func (f *PatchExecutor) applyTracksParallel() error {
+func (p *PatchExecutor) applyTracksParallel() error {
 	wg := sync.WaitGroup{}
-	sem := make(chan struct{}, f.cfg.Threads)
-	errChan := make(chan error, len(f.filesContents))
-	wg.Add(len(f.filesContents))
-	for file, content := range f.filesContents {
+	sem := make(chan struct{}, p.cfg.Threads)
+	errChan := make(chan error, len(p.filesContents))
+	wg.Add(len(p.filesContents))
+	for file, content := range p.filesContents {
 		sem <- struct{}{}
 		go func(file string, content string) {
 			defer func() {
 				<-sem
 				wg.Done()
 			}()
-			err := utils.FormatAndSave(file, []byte(content), f.cfg.PrinterConfig())
+			err := utils.FormatAndSave(file, []byte(content), p.cfg.PrinterConfig())
 			if err != nil {
 				log.Errorf("Failed to format and save file: %v", err)
 				errChan <- err

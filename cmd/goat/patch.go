@@ -45,7 +45,7 @@ Examples:
 			log.Info("----------------------------------------------------------")
 			log.Info("✅ Patch applied successfully!")
 			log.Info("Manual markers have been processed (// +goat:delete, // +goat:insert)")
-			log.Info("You can:")
+			log.Info("Suggested next steps:")
 			log.Info("- Review the changes using git diff or your preferred diff tool")
 			log.Info("- Build and test your application to verify the changes")
 			log.Info("- Add more manual markers and run 'goat patch' again if needed")
