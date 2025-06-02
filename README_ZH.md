@@ -8,11 +8,17 @@
 
 ## 简介
 
-`GOAT`（Golang Application Tracing）是一个高性能的代码追踪工具，帮助开发者在灰度发布期间自动追踪增量代码执行情况。
+`GOAT`（Golang Application Tracing）是一个高性能的代码追踪工具，帮助开发者在应用运行时自动追踪增量代码执行情况。
 
 ## 架构
 
 ![GOAT 架构](docs/images/goat-architecture.svg)
+
+## 功能特性
+
+- 自动检测Git分支变化
+- 实时提供新增代码执行覆盖率
+- 简单易用，轻松卸载
 
 ## 快速开始
 
@@ -64,6 +70,6 @@ goat clean
 
 ## 支持
 
-都不容易，如您喜欢请一键三连：Star & Fork & Watch！
+都不容易，如你喜欢请一键三连：Star & Fork & Watch！
 <br>
 谢谢！

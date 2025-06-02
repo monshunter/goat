@@ -6,7 +6,7 @@
 
 [中文文档](README_ZH.md) [Wiki](https://deepwiki.com/monshunter/goat)
 
-`GOAT` (Golang Application Tracing) is a high-performance code tracing tool that automatically tracks incremental code execution during gray releases.
+`GOAT` (Golang Application Tracing) is a high-performance code tracing tool that automatically tracks incremental code execution during runtime.
 
 ## Architecture
 
